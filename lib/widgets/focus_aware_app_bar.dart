@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'daily_data_usage_widget.dart';
+import 'juancho_theme.dart';
 import 'date_time_widget.dart';
 import 'network_widget.dart';
 import 'weather_status_bar_widget.dart';
@@ -253,7 +254,7 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
 
   @override
   Widget build(BuildContext context) {
-    final Color accent = Theme.of(context).colorScheme.primary;
+    const Color accent = kJuanchoGlow;
     final Widget icon = Icon(
       widget.icon,
       size: 26,
