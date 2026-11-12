@@ -41,7 +41,7 @@ class FocusBallOverlay extends StatefulWidget {
 
 class _FocusBallOverlayState extends State<FocusBallOverlay>
     with SingleTickerProviderStateMixin {
-  static const double _diameter = 46;
+  static const double _diameter = 66;
   static const double _hopMs = 480;
   static const double _bounce1Ms = 190;
   static const double _bounce2Ms = 130;
@@ -259,7 +259,8 @@ class _FocusBallOverlayState extends State<FocusBallOverlay>
   }
 }
 
-/// Balon antiguo de cuero: tono tostado, costuras, parche de agujetas y luz.
+/// Balon antiguo de cuero: paneles cosidos (3 franjas de 6), cuero gastado
+/// color coñac, agujetas cruzadas en un panel y brillo de luz.
 class _BallPainter extends CustomPainter {
   _BallPainter(this.angle, this.squash);
 
@@ -282,7 +283,7 @@ class _BallPainter extends CustomPainter {
       c + Offset(0, r * 0.14),
       r * 0.96,
       Paint()
-        ..color = const Color(0x77000000)
+        ..color = const Color(0x88000000)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.2),
     );
 
@@ -298,12 +299,12 @@ class _BallPainter extends CustomPainter {
           center: Alignment(-0.35, -0.4),
           radius: 1.05,
           colors: <Color>[
-            Color(0xFFE3B277),
-            Color(0xFFC68B50),
-            Color(0xFF94592B),
-            Color(0xFF5B3316),
+            Color(0xFFE8B97C),
+            Color(0xFFC98B4B),
+            Color(0xFF93572A),
+            Color(0xFF4F2B12),
           ],
-          stops: <double>[0.0, 0.42, 0.78, 1.0],
+          stops: <double>[0.0, 0.40, 0.76, 1.0],
         ).createShader(Rect.fromCircle(center: c, radius: r)),
     );
 
@@ -312,71 +313,82 @@ class _BallPainter extends CustomPainter {
     canvas.translate(c.dx, c.dy);
     canvas.rotate(angle);
 
-    // manchas del cuero
-    final math.Random rnd = math.Random(11);
-    for (int i = 0; i < 14; i++) {
+    // manchas y desgaste del cuero
+    final math.Random rnd = math.Random(7);
+    for (int i = 0; i < 18; i++) {
       final double a = rnd.nextDouble() * 2 * math.pi;
-      final double d = math.sqrt(rnd.nextDouble()) * r * 0.9;
-      final double rad = r * (0.08 + rnd.nextDouble() * 0.12);
+      final double d = math.sqrt(rnd.nextDouble()) * r * 0.92;
+      final double rad = r * (0.07 + rnd.nextDouble() * 0.12);
       final bool dark = rnd.nextBool();
       canvas.drawCircle(
         Offset(math.cos(a) * d, math.sin(a) * d),
         rad,
         Paint()
-          ..color = (dark ? const Color(0xFF3A1D0A) : const Color(0xFFFFE2B0))
-              .withOpacity(dark ? 0.10 : 0.08)
+          ..color = (dark ? const Color(0xFF2E1608) : const Color(0xFFFFE6B8))
+              .withOpacity(dark ? 0.16 : 0.12)
           ..maskFilter = MaskFilter.blur(BlurStyle.normal, rad * 0.6),
       );
     }
 
-    // costuras: tres meridianos que forman los gajos
+    // costuras de los paneles: dos lineas de "ecuador" y meridianos
     final Paint seam = Paint()
       ..style = PaintingStyle.stroke
-      ..color = const Color(0xFF38200E).withOpacity(0.9)
-      ..strokeWidth = r * 0.075;
-    final Paint stitch = Paint()
+      ..color = const Color(0xFF2B1507)
+      ..strokeWidth = r * 0.06
+      ..strokeCap = StrokeCap.round;
+    final Paint seamLight = Paint()
       ..style = PaintingStyle.stroke
-      ..color = const Color(0xFFF1D3A0).withOpacity(0.55)
-      ..strokeWidth = r * 0.022;
-    for (int k = 0; k < 3; k++) {
+      ..color = const Color(0xFFF3D6A4).withOpacity(0.45)
+      ..strokeWidth = r * 0.02
+      ..strokeCap = StrokeCap.round;
+
+    void line(Path path) {
+      canvas.drawPath(path, seam);
       canvas.save();
-      canvas.rotate(k * math.pi / 3);
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset.zero, width: r * 1.3, height: r * 2.02),
-        seam,
-      );
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset.zero, width: r * 1.18, height: r * 1.9),
-        stitch,
-      );
+      canvas.translate(r * 0.03, r * 0.03);
+      canvas.drawPath(path, seamLight);
       canvas.restore();
     }
 
-    // parche de agujetas
-    canvas.save();
-    canvas.translate(r * 0.30, -r * 0.22);
-    canvas.rotate(-0.35);
-    final RRect patch = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset.zero, width: r * 0.36, height: r * 0.62),
-      Radius.circular(r * 0.08),
-    );
-    canvas.drawRRect(patch, Paint()..color = const Color(0xFF6A3B18));
-    canvas.drawRRect(
-      patch,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..color = const Color(0xFF2B160A)
-        ..strokeWidth = r * 0.04,
-    );
-    final Paint lace = Paint()
-      ..color = const Color(0xFFF6E3C0)
-      ..strokeWidth = r * 0.04
-      ..strokeCap = StrokeCap.round;
-    for (int i = -2; i <= 2; i++) {
-      final double y = i * r * 0.11;
-      canvas.drawLine(Offset(-r * 0.10, y), Offset(r * 0.10, y), lace);
+    // franjas horizontales (curvadas como vistas desde arriba)
+    for (final double y in <double>[-0.34, 0.34]) {
+      final double half = math.sqrt(math.max(0.0, 1 - y * y)) * r;
+      final Path p = Path()
+        ..moveTo(-half * 1.05, y * r)
+        ..quadraticBezierTo(0, y * r + r * 0.20, half * 1.05, y * r);
+      line(p);
     }
-    canvas.restore();
+    // meridianos: forman los 6 paneles de cada franja
+    for (final double w in <double>[0.0, 0.42, 0.80]) {
+      if (w == 0.0) {
+        line(Path()
+          ..moveTo(0, -r)
+          ..lineTo(0, r));
+      } else {
+        for (final int sgn in <int>[-1, 1]) {
+          final Path p = Path()
+            ..moveTo(0, -r)
+            ..quadraticBezierTo(sgn * w * r * 1.9, 0, 0, r);
+          line(p);
+        }
+      }
+    }
+
+    // agujetas: ranura en el panel central con hilo cruzado
+    final RRect slit = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: Offset(0, -r * 0.02), width: r * 0.11, height: r * 0.50),
+      Radius.circular(r * 0.05),
+    );
+    canvas.drawRRect(slit, Paint()..color = const Color(0xFF1E0E05));
+    final Paint lace = Paint()
+      ..color = const Color(0xFFF7E8C8)
+      ..strokeWidth = r * 0.045
+      ..strokeCap = StrokeCap.round;
+    for (int i = 0; i < 5; i++) {
+      final double y = -r * 0.23 + i * r * 0.115;
+      canvas.drawLine(Offset(-r * 0.12, y - r * 0.035), Offset(r * 0.12, y + r * 0.035), lace);
+      canvas.drawLine(Offset(-r * 0.12, y + r * 0.035), Offset(r * 0.12, y - r * 0.035), lace);
+    }
 
     canvas.restore(); // fin de lo que gira
 
@@ -391,16 +403,16 @@ class _BallPainter extends CustomPainter {
           colors: <Color>[
             Color(0x00000000),
             Color(0x00000000),
-            Color(0x77000000),
+            Color(0x88000000),
           ],
-          stops: <double>[0.0, 0.58, 1.0],
+          stops: <double>[0.0, 0.55, 1.0],
         ).createShader(Rect.fromCircle(center: c, radius: r)),
     );
     canvas.drawCircle(
       c + Offset(-r * 0.38, -r * 0.42),
-      r * 0.30,
+      r * 0.28,
       Paint()
-        ..color = const Color(0x66FFFFFF)
+        ..color = const Color(0x77FFFFFF)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.22),
     );
 

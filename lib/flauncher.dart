@@ -24,6 +24,7 @@ import 'package:flauncher/providers/launcher_state.dart';
 import 'package:flauncher/providers/wallpaper_service.dart';
 import 'package:flauncher/widgets/apps_grid.dart';
 import 'package:flauncher/widgets/focus_ball_overlay.dart';
+import 'package:flauncher/widgets/home_dock.dart';
 import 'package:flauncher/widgets/category_row.dart';
 import 'package:flauncher/widgets/launcher_alternative_view.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
@@ -73,45 +74,14 @@ class _FLauncherState extends State<FLauncher> {
             child: Scaffold(
               backgroundColor: Colors.transparent,
               appBar: FocusAwareAppBar(key: _appBarKey),
-              body: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                child: Consumer<AppsService>(
-                  builder: (context, appsService, _) {
-                    if (appsService.initialized) {
-                      return Selector<WatchNextService, bool>(
-                        selector: (_, watchNext) => watchNext.programs.isNotEmpty,
-                        builder: (context, hasContinuingPrograms, _) =>
-                            Selector<SettingsService, ({bool show, int order})>(
-                              selector: (_, settings) => (
-                                show: settings.showContinueWatching,
-                                order: settings.continueWatchingOrder,
-                              ),
-                              builder: (context, cwSettings, _) =>
-                                  SingleChildScrollView(
-                                    physics: const ClampingScrollPhysics(),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        _sections(
-                                            appsService.launcherSections,
-                                            continueWatchingActive:
-                                                cwSettings.show &&
-                                                hasContinuingPrograms,
-                                            continueWatchingOrder:
-                                                cwSettings.order),
-                                      ],
-                                    ),
-                                  ),
-                            ),
-                    );
-                    }
-                    else {
-                      return _emptyState(context);
-                    }
-                  }
-                )
-              )
+              // LTv Juancho: solo la barra inferior con las apps importantes.
+              // (_sections queda sin uso a proposito, por si se quiere volver.)
+              body: Consumer<AppsService>(
+                builder: (context, appsService, _) =>
+                    appsService.initialized
+                        ? const HomeDock()
+                        : _emptyState(context),
+              ),
             )
           ),
           if (kFocusBallEnabled) const Positioned.fill(child: FocusBallOverlay()),
