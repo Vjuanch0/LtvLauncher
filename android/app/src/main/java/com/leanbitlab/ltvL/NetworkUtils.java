@@ -31,11 +31,13 @@ public class NetworkUtils
     public static final String KEY_NETWORK_TYPE = "networkType";
     public static final String KEY_WIRELESS_SIGNAL_LEVEL = "wirelessSignalLevel";
     public static final String KEY_VPN_ACTIVE = "vpnActive";
+    public static final String KEY_SSID = "ssid";
 
     public static Map<String, Object> getNetworkCapabilitiesInformation(Context context, NetworkCapabilities capabilities)
     {
         boolean hasNetworkAccess, hasInternetAccess;
         int wirelessNetworkSignalLevel = 0;
+        String ssid = null;
         int networkType = NETWORK_TYPE_UNKNOWN;
         boolean isVpnActive = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
 
@@ -58,6 +60,7 @@ public class NetworkUtils
                     && capabilities.getTransportInfo() instanceof WifiInfo) {
                 WifiInfo wifiInfo = (WifiInfo) capabilities.getTransportInfo();
                 wirelessNetworkSignalLevel = getWifiSignalLevel(wifiInfo);
+                ssid = cleanSsid(wifiInfo.getSSID());
             }
             else {
                 try {
@@ -65,6 +68,21 @@ public class NetworkUtils
                         WifiInfo wifiInfo = wifiManager.getConnectionInfo();
                         if (wifiInfo != null) {
                             wirelessNetworkSignalLevel = getWifiSignalLevel(wifiInfo);
+                            ssid = cleanSsid(wifiInfo.getSSID());
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
+            // Si el sistema oculta el nombre en el primer intento, probar con WifiManager
+            if (ssid == null) {
+                try {
+                    if (wifiManager != null) {
+                        WifiInfo wi = wifiManager.getConnectionInfo();
+                        if (wi != null) {
+                            ssid = cleanSsid(wi.getSSID());
                         }
                     }
                 } catch (Exception e) {
@@ -103,7 +121,28 @@ public class NetworkUtils
         map.put(KEY_NETWORK_TYPE, networkType);
         map.put(KEY_WIRELESS_SIGNAL_LEVEL, wirelessNetworkSignalLevel);
         map.put(KEY_VPN_ACTIVE, isVpnActive);
+        if (ssid != null) {
+            map.put(KEY_SSID, ssid);
+        }
         return map;
+    }
+
+    // Quita las comillas del SSID y descarta el valor "desconocido" que Android
+    // devuelve cuando no hay permiso de ubicacion.
+    @Nullable
+    private static String cleanSsid(@Nullable String raw)
+    {
+        if (raw == null) {
+            return null;
+        }
+        String s = raw.trim();
+        if (s.length() >= 2 && s.startsWith("\"") && s.endsWith("\"")) {
+            s = s.substring(1, s.length() - 1);
+        }
+        if (s.isEmpty() || s.equals("<unknown ssid>") || s.equals("0x")) {
+            return null;
+        }
+        return s;
     }
 
     public static Map<String, Object> getNetworkInformation(Context context, Network network)

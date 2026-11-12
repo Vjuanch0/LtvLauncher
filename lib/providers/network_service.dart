@@ -68,6 +68,7 @@ class NetworkService extends ChangeNotifier with WidgetsBindingObserver
   int                 _dailyDataUsage; // In bytes
   bool                _hasUsageStatsPermission;
   bool                _vpnActive;
+  String?             _ssid;
   Timer?              _usageTimer;
   int                 _callCount = 0;
   int                 _usageCallCount = 0;
@@ -172,6 +173,7 @@ class NetworkService extends ChangeNotifier with WidgetsBindingObserver
     super.dispose();
   }
 
+  String?               get   ssid                          => _ssid;
   bool                  get   hasInternetAccess             => _hasInternetAccess;
   CellularNetworkType   get   cellularNetworkType           => _cellularNetworkType;
   NetworkType           get   networkType                   => _networkType;
@@ -203,6 +205,8 @@ class NetworkService extends ChangeNotifier with WidgetsBindingObserver
         _networkType = NetworkType.Unknown;
       }
       _vpnActive = map["vpnActive"] as bool? ?? false;
+      final Object? ssidValue = map["ssid"];
+      _ssid = ssidValue is String && ssidValue.isNotEmpty ? ssidValue : null;
 
       if (_networkType == NetworkType.Cellular || _networkType == NetworkType.Wifi) {
         _wirelessNetworkSignalLevel = (map["wirelessSignalLevel"] as num?)?.toInt() ?? 0;

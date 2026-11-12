@@ -1,4 +1,5 @@
 import 'package:flauncher/providers/network_service.dart';
+import 'package:flauncher/widgets/juancho_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,10 +9,10 @@ class NetworkWidget extends StatelessWidget
 
   @override
   Widget build(BuildContext context) {
-    return Selector<NetworkService, (NetworkType, CellularNetworkType, int, bool)>(
-      selector: (_, ns) => (ns.networkType, ns.cellularNetworkType, ns.wirelessNetworkSignalLevel, ns.vpnActive),
+    return Selector<NetworkService, (NetworkType, CellularNetworkType, int, bool, String?)>(
+      selector: (_, ns) => (ns.networkType, ns.cellularNetworkType, ns.wirelessNetworkSignalLevel, ns.vpnActive, ns.ssid),
       builder: (context, state, _) {
-        final (networkType, cellularNetworkType, wirelessSignalLevel, vpnActive) = state;
+        final (networkType, cellularNetworkType, wirelessSignalLevel, vpnActive, ssid) = state;
         final networkService = context.read<NetworkService>();
         IconData physicalIcon = Icons.link_off;
         Color? iconColor;
@@ -76,6 +77,37 @@ class NetworkWidget extends StatelessWidget
             )
           ]
         );
+
+        // LTv Juancho: nombre de la red al lado del icono.
+        String? networkName;
+        if (networkType == NetworkType.Wifi && ssid != null && ssid.isNotEmpty) {
+          networkName = ssid;
+        } else if (networkType == NetworkType.Wired) {
+          networkName = 'Cable';
+        }
+        if (networkName != null) {
+          physicalWidget = Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              physicalWidget,
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 190),
+                child: Text(
+                  networkName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    shadows: [Shadow(color: Colors.black54, offset: Offset(0, 2), blurRadius: 8)],
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
 
         if (!vpnActive || physicalIcon == Icons.vpn_key) {
           return _NetworkIconButton(
@@ -149,19 +181,19 @@ class _NetworkIconButtonState extends State<_NetworkIconButton> {
           focusColor: Colors.transparent,
           hoverColor: Colors.transparent,
           highlightColor: Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(20),
           child: Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-              color: _focused ? Colors.black.withOpacity(0.3) : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
+              color: _focused ? Colors.white.withOpacity(0.2) : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
               // Constant border width so focus changes never resize the widget.
               border: Border.all(
-                color: _focused ? Theme.of(context).colorScheme.primary : Colors.transparent,
+                color: _focused ? Colors.white.withOpacity(0.95) : Colors.transparent,
                 width: 2,
               ),
               boxShadow: _focused
-                  ? const [BoxShadow(color: Colors.black54, blurRadius: 8, spreadRadius: 1)]
+                  ? [BoxShadow(color: kJuanchoGlow.withOpacity(0.5), blurRadius: 18, spreadRadius: 1)]
                   : null,
             ),
             child: widget.child,

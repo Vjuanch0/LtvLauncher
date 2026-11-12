@@ -268,7 +268,7 @@ class _BallPainter extends CustomPainter {
   final double angle;
   final double squash;
 
-  static const Color _ink = Color(0xFF2A1407);
+  static const Color _ink = Color(0xFF5B2C12);
 
   void _dashed(Canvas canvas, Path path, Paint paint, double dash, double gap) {
     for (final metric in path.computeMetrics()) {

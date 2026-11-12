@@ -48,7 +48,11 @@ class _FLauncherState extends State<FLauncher> {
   final GlobalKey<FocusAwareAppBarState> _appBarKey = GlobalKey();
 
   @override
-  Widget build(BuildContext context) => Actions(
+  Widget build(BuildContext context) => PopScope(
+    // LTv Juancho: Atras en la pantalla principal no hace nada (antes te
+    // mandaba al Home de Google). Los paneles abiertos si se cierran con Atras.
+    canPop: false,
+    child: Actions(
     actions: <Type, Action<Intent>>{
       MoveFocusToSettingsIntent: CallbackAction<MoveFocusToSettingsIntent>(
         onInvoke: (_) => _appBarKey.currentState?.focusSettings(),
@@ -88,7 +92,7 @@ class _FLauncherState extends State<FLauncher> {
         ]
       )
     ),
-  );
+  ));
 
   Widget _sections(
     List<LauncherSection> sections, {

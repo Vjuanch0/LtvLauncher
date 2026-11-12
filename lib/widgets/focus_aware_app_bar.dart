@@ -1,5 +1,5 @@
 import 'package:flauncher/widgets/settings/settings_panel.dart';
-import 'package:flauncher/widgets/settings/inputs_panel.dart';
+import 'package:flauncher/widgets/juancho_inputs_panel.dart';
 import 'package:flauncher/widgets/settings/notifications_panel.dart';
 import 'package:flauncher/providers/tv_inputs_service.dart';
 import 'package:flauncher/providers/notifications_service.dart';
@@ -151,10 +151,7 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                                 child: _FocusableIconButton(
                                   icon: Icons.settings_input_hdmi_rounded,
                                   focusNode: _inputsFocusNode,
-                                  onPressed: () => showDialog(
-                                    context: context,
-                                    builder: (_) => const InputsPanel(),
-                                  ),
+                                  onPressed: () => showJuanchoInputsPanel(context),
                                 ),
                               );
                             }

@@ -22,6 +22,8 @@ import 'package:flauncher/models/category.dart';
 import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/widgets/app_card_keys.dart';
+import 'package:flauncher/widgets/dock_weather.dart';
+import 'package:flauncher/widgets/football.dart';
 import 'package:flauncher/widgets/focus_ball_overlay.dart';
 import 'package:flauncher/widgets/focus_keyboard_listener.dart';
 import 'package:flauncher/widgets/juancho_theme.dart';
@@ -70,6 +72,7 @@ class _HomeDockState extends State<HomeDock>
   Timer? _idleTimer;
   int _greetingSeed = 0;
   ModalRoute<dynamic>? _route;
+  List<App> _apps = const <App>[];
 
   @override
   void initState() {
@@ -125,7 +128,32 @@ class _HomeDockState extends State<HomeDock>
         _justWoke = true;
       });
     }
+    // Botones de color del control: rojo, verde, amarillo y azul abren las
+    // primeras cuatro apps de la barra.
+    if (event is KeyDownEvent && !wasIdle && mounted) {
+      final int slot = _colorSlot(event.logicalKey);
+      final ModalRoute<dynamic>? route = _route;
+      if (slot >= 0 && slot < _apps.length && (route == null || route.isCurrent)) {
+        context.read<AppsService>().launchApp(_apps[slot]);
+      }
+    }
     return false; // nunca consume la tecla
+  }
+
+  int _colorSlot(LogicalKeyboardKey key) {
+    if (key == LogicalKeyboardKey.colorF0Red) {
+      return 0;
+    }
+    if (key == LogicalKeyboardKey.colorF1Green) {
+      return 1;
+    }
+    if (key == LogicalKeyboardKey.colorF2Yellow) {
+      return 2;
+    }
+    if (key == LogicalKeyboardKey.colorF3Blue) {
+      return 3;
+    }
+    return -1;
   }
 
   void _checkIdle() {
@@ -356,6 +384,7 @@ class _HomeDockState extends State<HomeDock>
               if (!a.hidden) a,
         ];
 
+        _apps = apps;
         final List<Widget> tiles = <Widget>[];
         for (int i = 0; i < apps.length; i++) {
           final App app = apps[i];
@@ -365,6 +394,7 @@ class _HomeDockState extends State<HomeDock>
               _DockTile(
                 key: ValueKey<String>('dock_${app.packageName}'),
                 autofocus: i == 0,
+                label: app.name,
                 neighborScale: _neighborScale(i),
                 onFocusChanged: (bool f) => _setFocus(i, f),
                 onSelect: () => _guard(() => service.launchApp(app)),
@@ -382,6 +412,7 @@ class _HomeDockState extends State<HomeDock>
               key: const ValueKey<String>('dock_add'),
               focusNode: _addNode,
               autofocus: apps.isEmpty,
+              label: 'Agregar app',
               neighborScale: _neighborScale(addIndex),
               onFocusChanged: (bool f) => _setFocus(addIndex, f),
               onSelect: () => _guard(() => _showAddDialog(service, cat)),
@@ -407,17 +438,44 @@ class _HomeDockState extends State<HomeDock>
                   ),
                   Padding(
                     padding: const EdgeInsets.only(left: 44),
-                    child: AnimatedSlide(
-                      offset: Offset(0, _idle ? 1.25 : 0),
-                      duration: const Duration(milliseconds: 800),
-                      curve: Curves.easeInOutCubic,
-                      child: AnimatedScale(
-                        scale: _idle ? 1.45 : 1.0,
-                        alignment: Alignment.bottomLeft,
-                        duration: const Duration(milliseconds: 800),
-                        curve: Curves.easeInOutCubic,
-                        child: const _DockClock(),
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: <Widget>[
+                        AnimatedSlide(
+                          offset: Offset(0, _idle ? 1.25 : 0),
+                          duration: const Duration(milliseconds: 800),
+                          curve: Curves.easeInOutCubic,
+                          child: AnimatedScale(
+                            scale: _idle ? 1.45 : 1.0,
+                            alignment: Alignment.bottomLeft,
+                            duration: const Duration(milliseconds: 800),
+                            curve: Curves.easeInOutCubic,
+                            child: const _DockClock(),
+                          ),
+                        ),
+                        const SizedBox(width: 28),
+                        // clima y futbol: chicos, a un lado del reloj; en reposo se esconden
+                        AnimatedOpacity(
+                          opacity: _idle ? 0 : 1,
+                          duration: const Duration(milliseconds: 500),
+                          child: ExcludeFocus(
+                            excluding: _idle,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 640),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const <Widget>[
+                                  DockWeatherChip(),
+                                  SizedBox(height: 8),
+                                  FootballLine(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -466,6 +524,7 @@ class _DockTile extends StatefulWidget {
     this.neighborScale = 1.0,
     this.autofocus = false,
     this.focusNode,
+    this.label,
   });
 
   final Widget child;
@@ -475,6 +534,7 @@ class _DockTile extends StatefulWidget {
   final double neighborScale;
   final bool autofocus;
   final FocusNode? focusNode;
+  final String? label;
 
   @override
   State<_DockTile> createState() => _DockTileState();
@@ -586,7 +646,35 @@ class _DockTileState extends State<_DockTile> with SingleTickerProviderStateMixi
                 scale: scale,
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeOutBack,
-                child: AnimatedContainer(
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: <Widget>[
+                    if (widget.label != null)
+                      Positioned(
+                        top: _tileH + 12,
+                        left: -44,
+                        right: -44,
+                        child: IgnorePointer(
+                          child: AnimatedOpacity(
+                            opacity: _focused ? 1 : 0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Text(
+                              widget.label!,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.6,
+                                color: Colors.white,
+                                shadows: <Shadow>[Shadow(color: Colors.black87, blurRadius: 8, offset: Offset(0, 2))],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
                   width: _tileW,
                   height: _tileH,
@@ -630,6 +718,8 @@ class _DockTileState extends State<_DockTile> with SingleTickerProviderStateMixi
                       ],
                     ),
                   ),
+                ),
+                  ],
                 ),
               ),
             ),
@@ -842,7 +932,7 @@ class _PickerItemState extends State<_PickerItem> {
 // Reloj
 // ---------------------------------------------------------------------------
 
-/// Reloj grande y elegante, encima de la barra.
+/// Reloj chico y elegante, encima de la barra.
 class _DockClock extends StatefulWidget {
   const _DockClock();
 
@@ -899,30 +989,30 @@ class _DockClockState extends State<_DockClock> {
         Text(
           time,
           style: const TextStyle(
-            fontSize: 72,
+            fontSize: 46,
             height: 1.0,
             fontWeight: FontWeight.w200,
-            letterSpacing: -1.5,
+            letterSpacing: -1.0,
             color: Colors.white,
             shadows: <Shadow>[Shadow(color: Colors.black54, blurRadius: 14, offset: Offset(0, 3))],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Container(
-              width: 4,
-              height: 20,
+              width: 3,
+              height: 14,
               decoration: BoxDecoration(color: kJuanchoGlow, borderRadius: BorderRadius.circular(2)),
             ),
             const SizedBox(width: 10),
             Text(
               date,
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 14,
                 fontWeight: FontWeight.w500,
-                letterSpacing: 2.4,
+                letterSpacing: 2.0,
                 color: Colors.white.withOpacity(0.88),
                 shadows: const <Shadow>[Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
               ),
