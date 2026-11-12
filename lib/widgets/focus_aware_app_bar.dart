@@ -87,124 +87,18 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
       },
       child: RepaintBoundary(
         child: AppBar(
-          // Line the settings glyph up with the left edge of the app tiles below
-          // (sections indent 16 + 8 card margin + 8 tile inset = 32dp; the icon
-          // button adds 4 padding + 2 border + 2 glyph inset, so start at 24).
-          titleSpacing: 24,
+          // LTv Juancho: todos los iconos van a la derecha, estilo cristal.
+          automaticallyImplyLeading: false,
           elevation: 0,
           scrolledUnderElevation: 0,
           backgroundColor: Colors.transparent,
-          // Left side: Settings, Network indicator, WiFi usage
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Settings button (moved to left side)
-              _FocusableIconButton(
-                icon: Icons.settings_outlined,
-                focusNode: _settingsFocusNode,
-                onPressed: () => showDialog(context: context, builder: (_) => const SettingsPanel()),
-              ),
-              Selector<SettingsService, bool>(
-                selector: (_, settings) => settings.showInputsWidgetInStatusBar,
-                builder: (context, showInputs, _) => showInputs
-                  ? Consumer<TvInputsService>(
-                      builder: (context, tvInputsService, _) {
-                        if (tvInputsService.hasInputs) {
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const SizedBox(width: 16),
-                              _FocusableIconButton(
-                                icon: Icons.tv_outlined,
-                                focusNode: _inputsFocusNode,
-                                onPressed: () => showDialog(
-                                  context: context,
-                                  builder: (_) => const InputsPanel(),
-                                ),
-                              ),
-                            ],
-                          );
-                        }
-                        return const SizedBox.shrink();
-                      },
-                    )
-                  : const SizedBox.shrink(),
-              ),
-              Selector<SettingsService, (bool, bool)>(
-                selector: (_, settings) => (
-                  settings.showNotificationsWidgetInStatusBar,
-                  settings.autoHideNotificationsWidget
-                ),
-                builder: (context, settingsState, _) {
-                  final (showNotifications, autoHide) = settingsState;
-                  return showNotifications
-                    ? Consumer<NotificationsService>(
-                        builder: (context, notificationsService, _) {
-                          if (notificationsService.hasPermission) {
-                            final count = notificationsService.notifications.length;
-                            if (autoHide && count == 0) {
-                              return const SizedBox.shrink();
-                            }
-                            return Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(width: 16),
-                                _FocusableIconButton(
-                                  icon: count > 0 ? Icons.notifications_active_outlined : Icons.notifications_outlined,
-                                  focusNode: _notificationsFocusNode,
-                                  badgeCount: count,
-                                  onPressed: () => showDialog(
-                                    context: context,
-                                    builder: (_) => const NotificationsPanel(),
-                                  ),
-                                ),
-                              ],
-                            );
-                          }
-                          return const SizedBox.shrink();
-                        },
-                      )
-                    : const SizedBox.shrink();
-                },
-              ),
-              const SizedBox(width: 16),
-              // Network indicator (conditionally shown)
-              Selector<SettingsService, bool>(
-                selector: (_, settings) => settings.showNetworkIndicatorInStatusBar,
-                builder: (context, showNetwork, _) => showNetwork
-                  ? const Padding(
-                      padding: EdgeInsets.only(right: 12),
-                      child: NetworkWidget(),
-                    )
-                  : const SizedBox.shrink(),
-              ),
-              // Data usage widget
-              Selector<SettingsService, bool>(
-                selector: (_, settings) => settings.showDataWidgetInStatusBar,
-                builder: (context, showData, _) => showData
-                  ? Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.12),
-                          width: 1,
-                        ),
-                      ),
-                      child: const DailyDataUsageWidget(),
-                    )
-                  : const SizedBox.shrink(),
-              ),
-            ],
-          ),
-          // Right side: Weather and Date/Time
           actions: [
             Padding(
-              padding: const EdgeInsets.only(left: 16, right: 32),
+              padding: const EdgeInsets.only(left: 16, right: 36, top: 6),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Clima (si esta activado)
                   Consumer<WeatherService>(
                     builder: (context, weatherService, _) {
                       return Selector<SettingsService, bool>(
@@ -215,7 +109,7 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 WeatherStatusBarWidget(focusNode: _weatherFocusNode),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: 14),
                               ],
                             );
                           }
@@ -224,67 +118,90 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                       );
                     },
                   ),
-                  Selector<SettingsService,
-                      ({
-                        bool showDateInStatusBar,
-                        bool showTimeInStatusBar,
-                        String dateFormat,
-                        String timeFormat })>(
-                    selector: (context, service) => (
-                    showDateInStatusBar: service.showDateInStatusBar,
-                    showTimeInStatusBar: service.showTimeInStatusBar,
-                    dateFormat: service.dateFormat,
-                    timeFormat: service.timeFormat),
-                    builder: (context, dateTimeSettings, _) {
-                      // Define standard text style
-                      const textStyle = TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w400,
-                        color: Colors.white,
-                        shadows: [
-                          Shadow(color: Colors.black54, offset: Offset(0, 2), blurRadius: 4)
-                        ],
-                      );
-
-                      if (!dateTimeSettings.showDateInStatusBar && !dateTimeSettings.showTimeInStatusBar) {
-                        return const SizedBox.shrink();
-                      }
-
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.12),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Date
-                            if (dateTimeSettings.showDateInStatusBar)
-                              DateTimeWidget(
-                                dateTimeSettings.dateFormat,
-                                key: const Key("statusbar_date"),
-                                textStyle: textStyle,
-                              ),
-                            
-                            if (dateTimeSettings.showDateInStatusBar && dateTimeSettings.showTimeInStatusBar)
-                                const SizedBox(width: 12),
-
-                            // Clock
-                            if (dateTimeSettings.showTimeInStatusBar)
-                              DateTimeWidget(
-                                dateTimeSettings.timeFormat,
-                                key: const Key("statusbar_clock"),
-                                textStyle: textStyle.copyWith(fontWeight: FontWeight.bold),
-                              ),
-                          ],
-                        ),
-                      );
+                  // Uso de datos (si esta activado)
+                  Selector<SettingsService, bool>(
+                    selector: (_, settings) => settings.showDataWidgetInStatusBar,
+                    builder: (context, showData, _) => showData
+                      ? Padding(
+                          padding: const EdgeInsets.only(right: 14),
+                          child: _GlassPill(child: const DailyDataUsageWidget()),
+                        )
+                      : const SizedBox.shrink(),
+                  ),
+                  // Wi-Fi / red
+                  Selector<SettingsService, bool>(
+                    selector: (_, settings) => settings.showNetworkIndicatorInStatusBar,
+                    builder: (context, showNetwork, _) => showNetwork
+                      ? Padding(
+                          padding: const EdgeInsets.only(right: 14),
+                          child: _GlassPill(child: const NetworkWidget()),
+                        )
+                      : const SizedBox.shrink(),
+                  ),
+                  // HDMI / entradas
+                  Selector<SettingsService, bool>(
+                    selector: (_, settings) => settings.showInputsWidgetInStatusBar,
+                    builder: (context, showInputs, _) => showInputs
+                      ? Consumer<TvInputsService>(
+                          builder: (context, tvInputsService, _) {
+                            if (tvInputsService.hasInputs) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 14),
+                                child: _FocusableIconButton(
+                                  icon: Icons.settings_input_hdmi_rounded,
+                                  focusNode: _inputsFocusNode,
+                                  onPressed: () => showDialog(
+                                    context: context,
+                                    builder: (_) => const InputsPanel(),
+                                  ),
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                        )
+                      : const SizedBox.shrink(),
+                  ),
+                  // Notificaciones
+                  Selector<SettingsService, (bool, bool)>(
+                    selector: (_, settings) => (
+                      settings.showNotificationsWidgetInStatusBar,
+                      settings.autoHideNotificationsWidget
+                    ),
+                    builder: (context, settingsState, _) {
+                      final (showNotifications, autoHide) = settingsState;
+                      return showNotifications
+                        ? Consumer<NotificationsService>(
+                            builder: (context, notificationsService, _) {
+                              if (notificationsService.hasPermission) {
+                                final count = notificationsService.notifications.length;
+                                if (autoHide && count == 0) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 14),
+                                  child: _FocusableIconButton(
+                                    icon: count > 0 ? Icons.notifications_active_outlined : Icons.notifications_outlined,
+                                    focusNode: _notificationsFocusNode,
+                                    badgeCount: count,
+                                    onPressed: () => showDialog(
+                                      context: context,
+                                      builder: (_) => const NotificationsPanel(),
+                                    ),
+                                  ),
+                                );
+                              }
+                              return const SizedBox.shrink();
+                            },
+                          )
+                        : const SizedBox.shrink();
                     },
+                  ),
+                  // Ajustes (engranaje) al final, en la esquina
+                  _FocusableIconButton(
+                    icon: Icons.settings_rounded,
+                    focusNode: _settingsFocusNode,
+                    onPressed: () => showDialog(context: context, builder: (_) => const SettingsPanel()),
                   ),
                 ],
               ),
@@ -296,7 +213,29 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
   }
 }
 
-/// Reusable focusable icon button with consistent outline focus indicator
+/// Capsula de cristal para indicadores que no son botones (Wi-Fi, datos).
+class _GlassPill extends StatelessWidget {
+  final Widget child;
+
+  const _GlassPill({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.30),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.16), width: 1),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Boton de icono redondo estilo cristal; al enfocarlo crece y brilla.
 class _FocusableIconButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback onPressed;
@@ -314,6 +253,13 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
 
   @override
   Widget build(BuildContext context) {
+    final Color accent = Theme.of(context).colorScheme.primary;
+    final Widget icon = Icon(
+      widget.icon,
+      size: 26,
+      color: Colors.white,
+      shadows: const [Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
+    );
     return Actions(
       actions: <Type, Action<Intent>>{
         ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => widget.onPressed()),
@@ -328,38 +274,35 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
           focusColor: Colors.transparent,
           hoverColor: Colors.transparent,
           highlightColor: Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.all(4),  // Match network indicator padding
-            decoration: BoxDecoration(
-              color: _focused ? Colors.black.withOpacity(0.3) : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-              // Always reserve the border width: a BoxDecoration border adds to the
-              // Container's padding, so toggling it between null and 2px would resize
-              // the button and shift its siblings horizontally on every focus change.
-              border: Border.all(
-                color: _focused ? Theme.of(context).colorScheme.primary : Colors.transparent,
-                width: 2,
-              ),
-              boxShadow: _focused
-                ? const [BoxShadow(color: Colors.black54, blurRadius: 8, spreadRadius: 1)]
-                : null,
-            ),
-            child: widget.badgeCount > 0
-              ? Badge(
-                  label: Text(widget.badgeCount.toString(), style: const TextStyle(color: Colors.white)),
-                  backgroundColor: Colors.red,
-                  child: Icon(widget.icon,
-                    shadows: const [
-                      Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))
-                    ],
-                  ),
-                )
-              : Icon(widget.icon,
-                  shadows: const [
-                    Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))
-                  ],
+          customBorder: const CircleBorder(),
+          child: AnimatedScale(
+            scale: _focused ? 1.15 : 1.0,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutBack,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 48,
+              height: 48,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _focused ? Colors.white.withOpacity(0.26) : Colors.black.withOpacity(0.30),
+                border: Border.all(
+                  color: _focused ? Colors.white.withOpacity(0.95) : Colors.white.withOpacity(0.16),
+                  width: _focused ? 2.5 : 1,
                 ),
+                boxShadow: _focused
+                  ? [BoxShadow(color: accent.withOpacity(0.5), blurRadius: 22, spreadRadius: 1)]
+                  : const [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 3))],
+              ),
+              child: widget.badgeCount > 0
+                ? Badge(
+                    label: Text(widget.badgeCount.toString(), style: const TextStyle(color: Colors.white)),
+                    backgroundColor: Colors.red,
+                    child: icon,
+                  )
+                : icon,
+            ),
           ),
         ),
       ),
