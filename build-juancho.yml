@@ -1,0 +1,50 @@
+name: Build LTv Juancho
+
+# Arma el APK de la TV (armeabi-v7a) cada vez que se sube un cambio a master,
+# o a mano desde la pestana Actions -> Run workflow.
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Install SQLite
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3 libsqlite3-dev
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Generate Mocks
+        run: flutter pub run build_runner build --delete-conflicting-outputs
+
+      - name: Generate Database Migrations Schema
+        run: flutter pub run drift_dev schema generate drift_schemas/ test/generated_migrations/
+
+      - name: Build APK (TV de 32 bits)
+        run: flutter build apk --release --split-per-abi --target-platform=android-arm
+
+      - name: Subir APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LTv-Juancho-armeabi-v7a
+          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          if-no-files-found: error

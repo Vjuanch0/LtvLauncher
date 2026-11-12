@@ -23,6 +23,7 @@ import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/launcher_state.dart';
 import 'package:flauncher/providers/wallpaper_service.dart';
 import 'package:flauncher/widgets/apps_grid.dart';
+import 'package:flauncher/widgets/focus_ball_overlay.dart';
 import 'package:flauncher/widgets/category_row.dart';
 import 'package:flauncher/widgets/launcher_alternative_view.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
@@ -112,7 +113,8 @@ class _FLauncherState extends State<FLauncher> {
                 )
               )
             )
-          )
+          ),
+          if (kFocusBallEnabled) const Positioned.fill(child: FocusBallOverlay()),
         ]
       )
     ),
@@ -213,9 +215,9 @@ class _FLauncherState extends State<FLauncher> {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                Colors.black.withOpacity(0.35),
-                Colors.black.withOpacity(0.15),
-                Colors.black.withOpacity(0.45),
+                Colors.black.withOpacity(0.08),
+                Colors.black.withOpacity(0.0),
+                Colors.black.withOpacity(0.20),
               ],
             ),
           ),

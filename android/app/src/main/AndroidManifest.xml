@@ -61,7 +61,7 @@
         android:allowBackup="false"
         android:banner="@drawable/banner"
         android:icon="@mipmap/ic_launcher"
-        android:label="LTvLauncher">
+        android:label="LTv Juancho">
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -118,7 +118,7 @@
 
         <service
             android:name=".LauncherAccessibilityService"
-            android:label="LTvLauncher Home Button Fix"
+            android:label="LTv Juancho Home Button Fix"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
             <intent-filter>
