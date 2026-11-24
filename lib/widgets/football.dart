@@ -34,6 +34,7 @@ class FootballTeamDef {
     required this.short,
     required this.league,
     required this.espnId,
+    required this.comps,
   });
 
   final String key; // id interno estable
@@ -41,23 +42,76 @@ class FootballTeamDef {
   final String short; // abreviatura de 3 letras
   final String league; // liga local en ESPN (col.1, eng.1, ita.1, ger.2...)
   final int espnId; // número del equipo en ESPN
+  final List<String> comps; // todas las competiciones a revisar (liga + copas)
 }
 
 const List<FootballTeamDef> kFootballTeams = <FootballTeamDef>[
-  FootballTeamDef(key: 'america', name: 'América de Cali', short: 'AME', league: 'col.1', espnId: 8109),
-  FootballTeamDef(key: 'manutd', name: 'Manchester United', short: 'MUN', league: 'eng.1', espnId: 360),
-  FootballTeamDef(key: 'arsenal', name: 'Arsenal', short: 'ARS', league: 'eng.1', espnId: 359),
-  FootballTeamDef(key: 'milan', name: 'AC Milan', short: 'MIL', league: 'ita.1', espnId: 103),
-  FootballTeamDef(key: 'inter', name: 'Inter', short: 'INT', league: 'ita.1', espnId: 110),
-  FootballTeamDef(key: 'stpauli', name: 'St. Pauli', short: 'STP', league: 'ger.2', espnId: 270),
+  FootballTeamDef(
+    key: 'america',
+    name: 'América de Cali',
+    short: 'AME',
+    league: 'col.1',
+    espnId: 8109,
+    comps: <String>['col.1', 'col.copa', 'conmebol.libertadores', 'conmebol.sudamericana'],
+  ),
+  FootballTeamDef(
+    key: 'manutd',
+    name: 'Manchester United',
+    short: 'MUN',
+    league: 'eng.1',
+    espnId: 360,
+    comps: <String>['eng.1', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf', 'eng.fa', 'eng.league_cup'],
+  ),
+  FootballTeamDef(
+    key: 'arsenal',
+    name: 'Arsenal',
+    short: 'ARS',
+    league: 'eng.1',
+    espnId: 359,
+    comps: <String>['eng.1', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf', 'eng.fa', 'eng.league_cup'],
+  ),
+  FootballTeamDef(
+    key: 'milan',
+    name: 'AC Milan',
+    short: 'MIL',
+    league: 'ita.1',
+    espnId: 103,
+    comps: <String>['ita.1', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf', 'ita.coppa_italia'],
+  ),
+  FootballTeamDef(
+    key: 'inter',
+    name: 'Inter',
+    short: 'INT',
+    league: 'ita.1',
+    espnId: 110,
+    comps: <String>['ita.1', 'uefa.champions', 'uefa.europa', 'uefa.europa.conf', 'ita.coppa_italia'],
+  ),
+  FootballTeamDef(
+    key: 'stpauli',
+    name: 'St. Pauli',
+    short: 'STP',
+    league: 'ger.2',
+    espnId: 270,
+    comps: <String>['ger.2', 'ger.dfb_pokal'],
+  ),
 ];
 
 const Map<String, String> _leagueNames = <String, String>{
   'col.1': 'Liga BetPlay',
+  'col.copa': 'Copa Colombia',
+  'conmebol.libertadores': 'Libertadores',
+  'conmebol.sudamericana': 'Sudamericana',
   'eng.1': 'Premier League',
+  'eng.fa': 'FA Cup',
+  'eng.league_cup': 'Carabao Cup',
   'ita.1': 'Serie A',
+  'ita.coppa_italia': 'Coppa Italia',
   'ger.1': 'Bundesliga',
   'ger.2': '2. Bundesliga',
+  'ger.dfb_pokal': 'DFB-Pokal',
+  'uefa.champions': 'Champions League',
+  'uefa.europa': 'Europa League',
+  'uefa.europa.conf': 'Conference League',
 };
 
 // ---------------------------------------------------------------------------
@@ -274,6 +328,19 @@ class FootballService extends ChangeNotifier {
   final Map<String, List<FRow>> _standings = <String, List<FRow>>{};
   final Map<String, int> _standingsFetch = <String, int>{};
 
+  // ultimo gol de uno de mis equipos (para el aviso "GOOOL")
+  String? _goalKey;
+  int _goalAt = 0;
+  static const int _goalShowMs = 25000;
+
+  /// Clave del equipo que acaba de meter gol (durante ~25 s), o null.
+  String? get goalTeamKey {
+    if (_goalKey != null && DateTime.now().millisecondsSinceEpoch - _goalAt < _goalShowMs) {
+      return _goalKey;
+    }
+    return null;
+  }
+
   // ESPN no pide clave: siempre activo.
   bool get enabled => true;
 
@@ -297,7 +364,7 @@ class FootballService extends ChangeNotifier {
     }
     _started = true;
     await _loadCache();
-    _timer = Timer.periodic(const Duration(seconds: 60), (_) => _tick());
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _tick());
     unawaited(_tick());
   }
 
@@ -394,43 +461,70 @@ class FootballService extends ChangeNotifier {
     return out;
   }
 
-  // Calendario completo del equipo: lo jugado + lo que viene.
+  // Calendario completo del equipo en todas sus competiciones: lo jugado + lo que viene.
   Future<void> _fetchSchedule(FootballTeamDef t) async {
-    final Map<String, dynamic>? past = await _getJson('$_base/${t.league}/teams/${t.espnId}/schedule');
-    final Map<String, dynamic>? next = await _getJson('$_base/${t.league}/teams/${t.espnId}/schedule?fixture=true');
+    final List<String> slugs = t.comps;
+    final List<Map<String, dynamic>?> past = await Future.wait(<Future<Map<String, dynamic>?>>[
+      for (final String c in slugs) _getJson('$_base/$c/teams/${t.espnId}/schedule'),
+    ]);
+    final List<Map<String, dynamic>?> next = await Future.wait(<Future<Map<String, dynamic>?>>[
+      for (final String c in slugs) _getJson('$_base/$c/teams/${t.espnId}/schedule?fixture=true'),
+    ]);
     _lastFetch[t.key] = DateTime.now().millisecondsSinceEpoch;
-    if (past == null && next == null) {
+    if (past.every((Map<String, dynamic>? x) => x == null) && next.every((Map<String, dynamic>? x) => x == null)) {
       return;
     }
     final Map<int, FMatch> byId = <int, FMatch>{
       for (final FMatch m in _matches[t.key] ?? const <FMatch>[]) m.id: m,
     };
     // primero lo que viene, luego lo jugado (lo jugado manda si el partido sale en los dos)
-    for (final FMatch m in <FMatch>[..._parseEvents(next, t.league), ..._parseEvents(past, t.league)]) {
-      byId[m.id] = m;
+    for (int i = 0; i < slugs.length; i++) {
+      for (final FMatch m in _parseEvents(next[i], slugs[i])) {
+        byId[m.id] = m;
+      }
+    }
+    for (int i = 0; i < slugs.length; i++) {
+      for (final FMatch m in _parseEvents(past[i], slugs[i])) {
+        byId[m.id] = m;
+      }
     }
     final DateTime now = DateTime.now();
     final List<FMatch> list = byId.values
         .where((FMatch m) =>
             m.kickoff.isAfter(now.subtract(const Duration(days: 45))) &&
-            m.kickoff.isBefore(now.add(const Duration(days: 45))))
+            m.kickoff.isBefore(now.add(const Duration(days: 120))))
         .toList()
       ..sort((FMatch a, FMatch b) => a.kickoff.compareTo(b.kickoff));
     _matches[t.key] = list;
   }
 
-  // Marcador en vivo de una liga: una sola petición sirve para todos mis equipos de esa liga.
+  // Marcador en vivo de una competicion: una sola peticion sirve para todos mis equipos que jueguen ahi.
   Future<void> _fetchLive(String league) async {
-    _lastLive[league] = DateTime.now().millisecondsSinceEpoch;
+    final int prevLive = _lastLive[league] ?? 0;
+    final int nowMs = DateTime.now().millisecondsSinceEpoch;
+    _lastLive[league] = nowMs;
     final Map<String, dynamic>? j = await _getJson('$_base/$league/scoreboard');
     for (final FMatch m in _parseEvents(j, league)) {
       for (final FootballTeamDef t in kFootballTeams) {
-        if (t.league != league || (m.homeId != t.espnId && m.awayId != t.espnId)) {
+        if (m.homeId != t.espnId && m.awayId != t.espnId) {
           continue;
         }
         final List<FMatch> list = _matches.putIfAbsent(t.key, () => <FMatch>[]);
         final int idx = list.indexWhere((FMatch x) => x.id == m.id);
         if (idx >= 0) {
+          final FMatch old = list[idx];
+          // ¿gol de mi equipo? (solo si ya veniamos siguiendo el partido)
+          final bool following = old.isLive || (old.status == 'NS' && nowMs - prevLive < 10 * 60000);
+          if (following && m.isLive) {
+            final bool home = m.homeId == t.espnId;
+            final int before = (home ? old.goalsHome : old.goalsAway) ?? 0;
+            final int after = (home ? m.goalsHome : m.goalsAway) ?? 0;
+            if (after > before) {
+              _goalKey = t.key;
+              _goalAt = nowMs;
+              Timer(const Duration(milliseconds: _goalShowMs + 1000), notifyListeners);
+            }
+          }
           list[idx] = m;
         } else {
           list.add(m);
@@ -438,6 +532,7 @@ class FootballService extends ChangeNotifier {
         }
       }
     }
+    notifyListeners();
   }
 
   static num? _stat(Object? stats, String name) {
@@ -496,7 +591,25 @@ class FootballService extends ChangeNotifier {
     _busy = true;
     try {
       final int now = DateTime.now().millisecondsSinceEpoch;
-      final Set<String> liveLeagues = <String>{};
+      // competicion -> true si hay un partido de mis equipos jugandose ya
+      final Map<String, bool> windows = <String, bool>{};
+
+      for (final FootballTeamDef t in kFootballTeams) {
+        for (final FMatch m in _matches[t.key] ?? const <FMatch>[]) {
+          final int k = m.kickoff.millisecondsSinceEpoch;
+          // en juego o por empezar
+          if (!m.isFinished && !m.isPostponed && now > k - 10 * 60000 && now < k + 150 * 60000) {
+            windows[m.league] = (windows[m.league] ?? false) || m.isLive;
+          }
+        }
+      }
+      // lo en vivo va primero para que un calendario lento no lo retrase
+      for (final MapEntry<String, bool> w in windows.entries) {
+        final int gap = w.value ? 25000 : const Duration(minutes: 2).inMilliseconds;
+        if (now - (_lastLive[w.key] ?? 0) > gap) {
+          await _fetchLive(w.key);
+        }
+      }
 
       for (final FootballTeamDef t in kFootballTeams) {
         final int last = _lastFetch[t.key] ?? 0;
@@ -505,11 +618,7 @@ class FootballService extends ChangeNotifier {
         bool stale = list.isEmpty ? now - last > 3 * 60000 : now - last > const Duration(hours: 6).inMilliseconds;
         for (final FMatch m in list) {
           final int k = m.kickoff.millisecondsSinceEpoch;
-          // en juego o por empezar
-          if (!m.isFinished && !m.isPostponed && now > k - 10 * 60000 && now < k + 150 * 60000) {
-            liveLeagues.add(t.league);
-          }
-          // ya debió terminar y aún figura sin resultado final: pedir de nuevo
+          // ya debio terminar y aun figura sin resultado final: pedir de nuevo
           if (!m.isFinished &&
               !m.isPostponed &&
               now > k + 110 * 60000 &&
@@ -527,12 +636,6 @@ class FootballService extends ChangeNotifier {
             : now - lastStand > const Duration(hours: 6).inMilliseconds;
         if (standStale) {
           await _fetchStandings(t);
-        }
-      }
-
-      for (final String league in liveLeagues) {
-        if (now - (_lastLive[league] ?? 0) > const Duration(minutes: 2).inMilliseconds) {
-          await _fetchLive(league);
         }
       }
     } finally {
@@ -753,7 +856,8 @@ class _FootballLineState extends State<FootballLine> {
     final List<(FootballTeamDef, FMatch)> live = <(FootballTeamDef, FMatch)>[];
     final List<(FootballTeamDef, FMatch)> rest = <(FootballTeamDef, FMatch)>[];
     for (final FootballTeamDef t in kFootballTeams) {
-      final FMatch? m = s.featuredFor(t.key);
+      // siempre algo que mostrar: lo de ahora, si no el proximo partido, si no el ultimo
+      final FMatch? m = s.featuredFor(t.key) ?? s.nextMatch(t.key) ?? s.lastPlayed(t.key);
       if (m == null) {
         continue;
       }
@@ -803,7 +907,17 @@ class _FootballLineState extends State<FootballLine> {
     if (cands.isEmpty) {
       return const SizedBox.shrink();
     }
-    final (FootballTeamDef t, FMatch m) = cands[_turn % cands.length];
+    // si uno de mis equipos acaba de meter gol, ese pasa al frente
+    final String? goalKey = s.goalTeamKey;
+    int pick = _turn % cands.length;
+    if (goalKey != null) {
+      final int gi = cands.indexWhere(((FootballTeamDef, FMatch) c) => c.$1.key == goalKey);
+      if (gi >= 0) {
+        pick = gi;
+      }
+    }
+    final (FootballTeamDef t, FMatch m) = cands[pick];
+    final bool goal = goalKey != null && t.key == goalKey;
 
     return FocusKeyboardListener(
       onPressed: (LogicalKeyboardKey key) {
@@ -833,12 +947,14 @@ class _FootballLineState extends State<FootballLine> {
               color: Colors.black.withOpacity(_focused ? 0.45 : 0.28),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: _focused ? Colors.white.withOpacity(0.9) : Colors.white.withOpacity(0.12),
-                width: _focused ? 2 : 1,
+                color: goal
+                    ? kJuanchoEmber
+                    : (_focused ? Colors.white.withOpacity(0.9) : Colors.white.withOpacity(0.12)),
+                width: (_focused || goal) ? 2 : 1,
               ),
-              boxShadow: _focused
-                  ? <BoxShadow>[BoxShadow(color: kJuanchoGlow.withOpacity(0.5), blurRadius: 20)]
-                  : null,
+              boxShadow: goal
+                  ? <BoxShadow>[BoxShadow(color: kJuanchoGlow.withOpacity(0.85), blurRadius: 30, spreadRadius: 2)]
+                  : (_focused ? <BoxShadow>[BoxShadow(color: kJuanchoGlow.withOpacity(0.5), blurRadius: 20)] : null),
             ),
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 450),
@@ -850,7 +966,7 @@ class _FootballLineState extends State<FootballLine> {
                 ),
               ),
               child: Column(
-                key: ValueKey<String>('${t.key}_${m.id}_${m.status}_${m.goalsHome}_${m.goalsAway}'),
+                key: ValueKey<String>('${t.key}_${m.id}_${m.status}_${m.goalsHome}_${m.goalsAway}_$goal'),
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
@@ -877,7 +993,13 @@ class _FootballLineState extends State<FootballLine> {
                     ],
                   ),
                   const SizedBox(height: 3),
-                  _chips(t, m),
+                  if (goal)
+                    const Text(
+                      '⚽ ¡GOOOL!',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: kJuanchoEmber),
+                    )
+                  else
+                    _chips(t, m),
                 ],
               ),
             ),

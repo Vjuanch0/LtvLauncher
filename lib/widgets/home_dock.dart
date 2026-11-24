@@ -443,35 +443,37 @@ class _HomeDockState extends State<HomeDock>
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: <Widget>[
                         AnimatedSlide(
-                          offset: Offset(0, _idle ? 1.25 : 0),
+                          offset: Offset(0, _idle ? 1.0 : 0),
                           duration: const Duration(milliseconds: 800),
                           curve: Curves.easeInOutCubic,
                           child: AnimatedScale(
-                            scale: _idle ? 1.45 : 1.0,
+                            scale: _idle ? 1.3 : 1.0,
                             alignment: Alignment.bottomLeft,
                             duration: const Duration(milliseconds: 800),
                             curve: Curves.easeInOutCubic,
-                            child: const _DockClock(),
-                          ),
-                        ),
-                        const SizedBox(width: 28),
-                        // clima y futbol: chicos, a un lado del reloj; en reposo se esconden
-                        AnimatedOpacity(
-                          opacity: _idle ? 0 : 1,
-                          duration: const Duration(milliseconds: 500),
-                          child: ExcludeFocus(
-                            excluding: _idle,
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 640),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: const <Widget>[
-                                  DockWeatherChip(),
-                                  SizedBox(height: 8),
-                                  FootballLine(),
-                                ],
-                              ),
+                            // reloj + clima + futbol van juntos y siempre se ven (tambien en reposo)
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: <Widget>[
+                                const _DockClock(),
+                                const SizedBox(width: 28),
+                                ExcludeFocus(
+                                  excluding: _idle,
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(maxWidth: 520),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: const <Widget>[
+                                        DockWeatherChip(),
+                                        SizedBox(height: 8),
+                                        FootballLine(),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -1084,34 +1086,33 @@ class _GreetingState extends State<_Greeting> with SingleTickerProviderStateMixi
   static String _fraseNueva(DateTime t) {
     final int h = t.hour;
     final List<String> madrugada = <String>[
-      '{H}, VJ… ¿sigues despierto, parce?',
-      '{H} y la caldera sigue prendida, VJ',
-      '{H}, VJ. ¿Y ese desvelo, parcero?',
-      '{H}. A esta hora solo quedamos los duros, parce',
-      '{H}. Eso es berraquera, parce: siga dándole',
+      '¿Qué hace despierto, socio? Eche a dormir…',
+      'Ya mucho trasnoche, deje el visaje',
+      'A esta hora sale el coco, ojo socioooo, pilas…',
+      'Una pajita y a mimir, esta hora es para las perras',
+      'Melo, una pajita y a levantarse, papa',
     ];
     final List<String> manana = <String>[
-      '{H}, VJ. Arriba, que el día está para comérselo',
-      'Qué más, Juancho. {H}: a darle con toda',
-      '{H} y ya andamos de pie. Eso, parce',
-      '{H}. Tinto, pilas y que arda el día',
+      'Vamoooo, perroooo, el día está melo, vamos IRIE',
+      'Buena papurri, ¿cómo vamos? ¿Melo?',
+      'Saque a Jacob un rato, relájese, una aromática y siga, papa',
+      'A nada del almuerzo, va ganado, papa',
     ];
     final List<String> tarde = <String>[
-      '{H}, VJ. ¿Qué más, parce, cómo va la tarde?',
-      '{H}. Hágale, que la tarde está para un buen parche',
-      '{H}, Juancho. Un descansito bien merecido',
-      '{H} y la caldera tibia, parcero',
+      'Mera tarde papurri, ¿melo?',
+      'Veo, está re makia la tarde, pico a Jacob y a Luna, papu',
+      'Un sueñito a esta hora, viejo Juancho, no caería nada mal',
+      '¿Una aromática? ¿O un té? Pero mueva el culo, papurri',
     ];
     final List<String> noche = <String>[
-      '{H}, VJ. Prenda la caldera, que arranca el parche',
-      '{H}, Juancho. Hoy hay plan: sofá, pantalla y cero afán',
-      'Qué nota la noche, VJ. {H}',
-      '{H}, parcero. ¡Que arda la noche!',
+      'Unas onces no caerían mal, papurri',
+      'Oeee… venga le digo, acostate omeee… lochita un rato, papu',
+      'Viejito, la noche está melaaaaaaa…',
+      'Juanchito, espero le saque provechito a esta noche, si no una paja cuenta 😂',
     ];
-    final List<String> finde = <String>[
-      '¡Parche de viernes, Juancho! {H}',
-      '{H}. Fin de semana, VJ: a prender esa caldera',
-    ];
+    // F1 solo viernes; F2 viernes y sabado
+    final String viernes = 'Viernes en la casa, esoooo… Saque cobija y veamos algo';
+    final String finde = 'Epaaaaaa… buenas, buenas… disfrute, papurris';
 
     List<String> lista;
     if (h < 5) {
@@ -1122,8 +1123,10 @@ class _GreetingState extends State<_Greeting> with SingleTickerProviderStateMixi
       lista = tarde;
     } else {
       lista = noche;
-      if (t.weekday == DateTime.friday || t.weekday == DateTime.saturday) {
-        lista = <String>[...noche, ...finde];
+      if (t.weekday == DateTime.friday) {
+        lista = <String>[...noche, viernes, finde];
+      } else if (t.weekday == DateTime.saturday) {
+        lista = <String>[...noche, finde];
       }
     }
     final math.Random rnd = math.Random();
