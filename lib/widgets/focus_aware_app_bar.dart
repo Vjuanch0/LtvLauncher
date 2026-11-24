@@ -95,7 +95,7 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
           backgroundColor: Colors.transparent,
           actions: [
             Padding(
-              padding: const EdgeInsets.only(left: 16, right: 36, top: 6),
+              padding: const EdgeInsets.only(left: 16, right: 36, top: 2),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -134,8 +134,8 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                     selector: (_, settings) => settings.showNetworkIndicatorInStatusBar,
                     builder: (context, showNetwork, _) => showNetwork
                       ? Padding(
-                          padding: const EdgeInsets.only(right: 14),
-                          child: _GlassPill(child: const NetworkWidget()),
+                          padding: const EdgeInsets.only(right: 26),
+                          child: const NetworkWidget(),
                         )
                       : const SizedBox.shrink(),
                   ),
@@ -147,9 +147,10 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                           builder: (context, tvInputsService, _) {
                             if (tvInputsService.hasInputs) {
                               return Padding(
-                                padding: const EdgeInsets.only(right: 14),
+                                padding: const EdgeInsets.only(right: 26),
                                 child: _FocusableIconButton(
-                                  icon: Icons.settings_input_hdmi_rounded,
+                                  icon: Icons.tv_rounded,
+                                  label: 'Entradas',
                                   focusNode: _inputsFocusNode,
                                   onPressed: () => showJuanchoInputsPanel(context),
                                 ),
@@ -177,9 +178,10 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                                   return const SizedBox.shrink();
                                 }
                                 return Padding(
-                                  padding: const EdgeInsets.only(right: 14),
+                                  padding: const EdgeInsets.only(right: 26),
                                   child: _FocusableIconButton(
                                     icon: count > 0 ? Icons.notifications_active_outlined : Icons.notifications_outlined,
+                                    label: 'Avisos',
                                     focusNode: _notificationsFocusNode,
                                     badgeCount: count,
                                     onPressed: () => showDialog(
@@ -198,6 +200,7 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                   // Ajustes (engranaje) al final, en la esquina
                   _FocusableIconButton(
                     icon: Icons.settings_rounded,
+                    label: 'Ajustes',
                     focusNode: _settingsFocusNode,
                     onPressed: () => showDialog(context: context, builder: (_) => const SettingsPanel()),
                   ),
@@ -233,14 +236,22 @@ class _GlassPill extends StatelessWidget {
   }
 }
 
-/// Boton de icono redondo estilo cristal; al enfocarlo crece y brilla.
+/// Icono grande sin capsula, con su nombre debajo; al enfocarlo crece un poco
+/// y se enciende una rayita de brasa.
 class _FocusableIconButton extends StatefulWidget {
   final IconData icon;
+  final String label;
   final VoidCallback onPressed;
   final FocusNode? focusNode;
   final int badgeCount;
 
-  const _FocusableIconButton({required this.icon, required this.onPressed, this.focusNode, this.badgeCount = 0});
+  const _FocusableIconButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.focusNode,
+    this.badgeCount = 0,
+  });
 
   @override
   State<_FocusableIconButton> createState() => _FocusableIconButtonState();
@@ -251,13 +262,19 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
 
   @override
   Widget build(BuildContext context) {
-    const Color accent = kJuanchoGlow;
     final Widget icon = Icon(
       widget.icon,
-      size: 26,
+      size: 30,
       color: Colors.white,
       shadows: const [Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
     );
+    final Widget iconWithBadge = widget.badgeCount > 0
+        ? Badge(
+            label: Text(widget.badgeCount.toString(), style: const TextStyle(color: Colors.white)),
+            backgroundColor: Colors.red,
+            child: icon,
+          )
+        : icon;
     return Actions(
       actions: <Type, Action<Intent>>{
         ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => widget.onPressed()),
@@ -272,34 +289,39 @@ class _FocusableIconButtonState extends State<_FocusableIconButton> {
           focusColor: Colors.transparent,
           hoverColor: Colors.transparent,
           highlightColor: Colors.transparent,
-          customBorder: const CircleBorder(),
+          borderRadius: BorderRadius.circular(12),
           child: AnimatedScale(
-            scale: _focused ? 1.15 : 1.0,
+            scale: _focused ? 1.08 : 1.0,
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOutBack,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 48,
-              height: 48,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _focused ? Colors.white.withOpacity(0.26) : Colors.black.withOpacity(0.30),
-                border: Border.all(
-                  color: _focused ? Colors.white.withOpacity(0.95) : Colors.white.withOpacity(0.16),
-                  width: _focused ? 2.5 : 1,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                iconWithBadge,
+                const SizedBox(height: 2),
+                Text(
+                  widget.label,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.1,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withOpacity(_focused ? 1.0 : 0.85),
+                    shadows: const [Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
+                  ),
                 ),
-                boxShadow: _focused
-                  ? [BoxShadow(color: accent.withOpacity(0.5), blurRadius: 22, spreadRadius: 1)]
-                  : const [BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 3))],
-              ),
-              child: widget.badgeCount > 0
-                ? Badge(
-                    label: Text(widget.badgeCount.toString(), style: const TextStyle(color: Colors.white)),
-                    backgroundColor: Colors.red,
-                    child: icon,
-                  )
-                : icon,
+                const SizedBox(height: 2),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 28,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: _focused ? kJuanchoGlow : Colors.transparent,
+                    borderRadius: BorderRadius.circular(2),
+                    boxShadow: _focused ? [BoxShadow(color: kJuanchoGlow.withOpacity(0.7), blurRadius: 10)] : null,
+                  ),
+                ),
+              ],
             ),
           ),
         ),

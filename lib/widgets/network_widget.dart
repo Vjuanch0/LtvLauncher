@@ -68,7 +68,8 @@ class NetworkWidget extends StatelessWidget
 
         Widget physicalWidget = Icon(
           physicalIcon,
-          color: iconColor,
+          size: 30,
+          color: iconColor ?? Colors.white,
           shadows: const [
             Shadow(
               color: Colors.black54,
@@ -78,36 +79,41 @@ class NetworkWidget extends StatelessWidget
           ]
         );
 
-        // LTv Juancho: nombre de la red al lado del icono.
-        String? networkName;
-        if (networkType == NetworkType.Wifi && ssid != null && ssid.isNotEmpty) {
-          networkName = ssid;
+        // LTv Juancho: nombre de la red debajo del icono.
+        final String networkName;
+        if (networkType == NetworkType.Wifi) {
+          networkName = (ssid != null && ssid.isNotEmpty) ? ssid : 'Wi-Fi';
         } else if (networkType == NetworkType.Wired) {
           networkName = 'Cable';
+        } else if (networkType == NetworkType.Vpn) {
+          networkName = 'VPN';
+        } else if (networkType == NetworkType.Cellular) {
+          networkName = 'Móvil';
+        } else {
+          networkName = 'Sin red';
         }
-        if (networkName != null) {
-          physicalWidget = Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              physicalWidget,
-              const SizedBox(width: 8),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 190),
-                child: Text(
-                  networkName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                    shadows: [Shadow(color: Colors.black54, offset: Offset(0, 2), blurRadius: 8)],
-                  ),
+        physicalWidget = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            physicalWidget,
+            const SizedBox(height: 2),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 150),
+              child: Text(
+                networkName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.1,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white.withOpacity(0.85),
+                  shadows: const [Shadow(color: Colors.black54, offset: Offset(0, 2), blurRadius: 8)],
                 ),
               ),
-            ],
-          );
-        }
+            ),
+          ],
+        );
 
         if (!vpnActive || physicalIcon == Icons.vpn_key) {
           return _NetworkIconButton(
@@ -181,22 +187,28 @@ class _NetworkIconButtonState extends State<_NetworkIconButton> {
           focusColor: Colors.transparent,
           hoverColor: Colors.transparent,
           highlightColor: Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            padding: const EdgeInsets.all(4),
-            decoration: BoxDecoration(
-              color: _focused ? Colors.white.withOpacity(0.2) : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-              // Constant border width so focus changes never resize the widget.
-              border: Border.all(
-                color: _focused ? Colors.white.withOpacity(0.95) : Colors.transparent,
-                width: 2,
-              ),
-              boxShadow: _focused
-                  ? [BoxShadow(color: kJuanchoGlow.withOpacity(0.5), blurRadius: 18, spreadRadius: 1)]
-                  : null,
+          borderRadius: BorderRadius.circular(12),
+          child: AnimatedScale(
+            scale: _focused ? 1.08 : 1.0,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutBack,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                widget.child,
+                const SizedBox(height: 2),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 28,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: _focused ? kJuanchoGlow : Colors.transparent,
+                    borderRadius: BorderRadius.circular(2),
+                    boxShadow: _focused ? [BoxShadow(color: kJuanchoGlow.withOpacity(0.7), blurRadius: 10)] : null,
+                  ),
+                ),
+              ],
             ),
-            child: widget.child,
           ),
         ),
       ),
