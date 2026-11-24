@@ -2,11 +2,14 @@
  * LTv Juancho - fútbol: línea chica junto al reloj + panel con tus equipos.
  * Archivo nuevo; no forma parte del proyecto original.
  *
- * Datos: API-Football (plan gratis, 100 peticiones al día). La clave NO va en el
- * código: se deja en un archivo dentro de la carpeta de la app en la TV
- * (ver script 17-clave-futbol.ps1). Sin clave, todo esto queda oculto.
+ * Datos: ESPN (gratis y SIN clave). Ya no se usa API-Football.
+ *  - partidos pasados:   .../teams/{id}/schedule
+ *  - partidos próximos:  .../teams/{id}/schedule?fixture=true
+ *  - marcador en vivo:   .../{liga}/scoreboard
+ *  - tabla de posiciones: .../{liga}/standings
  *
- * Para cambiar los equipos, editar la lista kFootballTeams.
+ * Para cambiar los equipos, editar la lista kFootballTeams
+ * (liga = código de liga de ESPN, espnId = número del equipo en ESPN).
  */
 
 import 'dart:async';
@@ -29,43 +32,41 @@ class FootballTeamDef {
     required this.key,
     required this.name,
     required this.short,
-    required this.search,
-    required this.country,
-    required this.calendarSeason,
+    required this.league,
+    required this.espnId,
   });
 
   final String key; // id interno estable
   final String name; // nombre para mostrar
   final String short; // abreviatura de 3 letras
-  final String search; // texto para buscar en la API
-  final String country; // filtro de pais para la busqueda
-  final bool calendarSeason; // true: temporada = año (Colombia); false: europea
+  final String league; // liga local en ESPN (col.1, eng.1, ita.1, ger.2...)
+  final int espnId; // número del equipo en ESPN
 }
 
 const List<FootballTeamDef> kFootballTeams = <FootballTeamDef>[
-  FootballTeamDef(
-      key: 'america', name: 'América de Cali', short: 'AME', search: 'America de Cali', country: 'Colombia', calendarSeason: true),
-  FootballTeamDef(
-      key: 'milan', name: 'AC Milan', short: 'MIL', search: 'AC Milan', country: 'Italy', calendarSeason: false),
-  FootballTeamDef(
-      key: 'inter', name: 'Inter', short: 'INT', search: 'Inter', country: 'Italy', calendarSeason: false),
-  FootballTeamDef(
-      key: 'manutd',
-      name: 'Manchester United',
-      short: 'MUN',
-      search: 'Manchester United',
-      country: 'England',
-      calendarSeason: false),
-  FootballTeamDef(
-      key: 'arsenal', name: 'Arsenal', short: 'ARS', search: 'Arsenal', country: 'England', calendarSeason: false),
+  FootballTeamDef(key: 'america', name: 'América de Cali', short: 'AME', league: 'col.1', espnId: 8109),
+  FootballTeamDef(key: 'manutd', name: 'Manchester United', short: 'MUN', league: 'eng.1', espnId: 360),
+  FootballTeamDef(key: 'arsenal', name: 'Arsenal', short: 'ARS', league: 'eng.1', espnId: 359),
+  FootballTeamDef(key: 'milan', name: 'AC Milan', short: 'MIL', league: 'ita.1', espnId: 103),
+  FootballTeamDef(key: 'inter', name: 'Inter', short: 'INT', league: 'ita.1', espnId: 110),
+  FootballTeamDef(key: 'stpauli', name: 'St. Pauli', short: 'STP', league: 'ger.2', espnId: 270),
 ];
+
+const Map<String, String> _leagueNames = <String, String>{
+  'col.1': 'Liga BetPlay',
+  'eng.1': 'Premier League',
+  'ita.1': 'Serie A',
+  'ger.1': 'Bundesliga',
+  'ger.2': '2. Bundesliga',
+};
 
 // ---------------------------------------------------------------------------
 // Modelos
 // ---------------------------------------------------------------------------
 
-const Set<String> _liveStatuses = <String>{'1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'};
-const Set<String> _finishedStatuses = <String>{'FT', 'AET', 'PEN'};
+const Set<String> _liveStatuses = <String>{'LIVE', 'HT'};
+const Set<String> _finishedStatuses = <String>{'FT'};
+const Set<String> _postponedStatuses = <String>{'PST', 'CANC', 'ABD'};
 
 class FMatch {
   FMatch({
@@ -79,14 +80,13 @@ class FMatch {
     required this.awayName,
     required this.goalsHome,
     required this.goalsAway,
-    required this.leagueId,
+    required this.league,
     required this.leagueName,
-    required this.round,
   });
 
   final int id;
   final DateTime kickoff;
-  final String status;
+  final String status; // NS, LIVE, HT, FT, PST, CANC, ABD
   final int? elapsed;
   final int homeId;
   final int awayId;
@@ -94,39 +94,111 @@ class FMatch {
   final String awayName;
   final int? goalsHome;
   final int? goalsAway;
-  final int leagueId;
+  final String league; // código ESPN de la liga (col.1, eng.1...)
   final String leagueName;
-  final String round;
 
   bool get isLive => _liveStatuses.contains(status);
   bool get isFinished => _finishedStatuses.contains(status);
-  bool get isPostponed => status == 'PST' || status == 'CANC' || status == 'ABD' || status == 'AWD' || status == 'WO';
+  bool get isPostponed => _postponedStatuses.contains(status);
   bool get isUpcoming => !isLive && !isFinished && !isPostponed;
 
   static int? _int(Object? v) => v is num ? v.toInt() : null;
 
-  factory FMatch.fromApi(Map<String, dynamic> j) {
-    final Map<String, dynamic> fx = (j['fixture'] as Map).cast<String, dynamic>();
-    final Map<String, dynamic> teams = (j['teams'] as Map).cast<String, dynamic>();
-    final Map<String, dynamic> home = (teams['home'] as Map).cast<String, dynamic>();
-    final Map<String, dynamic> away = (teams['away'] as Map).cast<String, dynamic>();
-    final Map<String, dynamic> goals = ((j['goals'] ?? <String, dynamic>{}) as Map).cast<String, dynamic>();
-    final Map<String, dynamic> league = (j['league'] as Map).cast<String, dynamic>();
-    final Map<String, dynamic> st = ((fx['status'] ?? <String, dynamic>{}) as Map).cast<String, dynamic>();
+  static int? _score(Object? v) {
+    if (v is num) {
+      return v.toInt();
+    }
+    if (v is String) {
+      return int.tryParse(v);
+    }
+    if (v is Map) {
+      return _score(v['value'] ?? v['displayValue']);
+    }
+    return null;
+  }
+
+  static int? _clockMinute(String clock) {
+    final RegExpMatch? m = RegExp(r'(\d+)').firstMatch(clock);
+    return m == null ? null : int.tryParse(m.group(1)!);
+  }
+
+  /// Convierte un "evento" de ESPN en un partido. Devuelve null si no se entiende.
+  static FMatch? fromEspn(Map<String, dynamic> ev, String league) {
+    final List<dynamic> comps = (ev['competitions'] as List?) ?? const <dynamic>[];
+    if (comps.isEmpty) {
+      return null;
+    }
+    final Map<String, dynamic> comp = (comps.first as Map).cast<String, dynamic>();
+    Map<String, dynamic>? home;
+    Map<String, dynamic>? away;
+    for (final dynamic c in (comp['competitors'] as List?) ?? const <dynamic>[]) {
+      final Map<String, dynamic> m = (c as Map).cast<String, dynamic>();
+      if (m['homeAway'] == 'home') {
+        home = m;
+      } else if (m['homeAway'] == 'away') {
+        away = m;
+      }
+    }
+    if (home == null || away == null) {
+      return null;
+    }
+    final DateTime? kickoff = DateTime.tryParse('${ev['date'] ?? comp['date'] ?? ''}')?.toLocal();
+    final int? id = int.tryParse('${ev['id'] ?? ''}');
+    if (kickoff == null || id == null) {
+      return null;
+    }
+    final Map<String, dynamic> ht = ((home['team'] ?? <String, dynamic>{}) as Map).cast<String, dynamic>();
+    final Map<String, dynamic> at = ((away['team'] ?? <String, dynamic>{}) as Map).cast<String, dynamic>();
+    final int? gh = _score(home['score']);
+    final int? ga = _score(away['score']);
+
+    String status = 'NS';
+    int? elapsed;
+    bool hadState = false;
+    final Object? stRaw = comp['status'] ?? ev['status'];
+    if (stRaw is Map) {
+      final Map<String, dynamic> st = stRaw.cast<String, dynamic>();
+      final Map<String, dynamic> type = ((st['type'] ?? <String, dynamic>{}) as Map).cast<String, dynamic>();
+      final String state = '${type['state'] ?? ''}';
+      final String name = '${type['name'] ?? ''}'.toUpperCase();
+      hadState = state.isNotEmpty;
+      if (name.contains('POSTPONED')) {
+        status = 'PST';
+      } else if (name.contains('CANCEL')) {
+        status = 'CANC';
+      } else if (name.contains('SUSPEND') || name.contains('ABANDON')) {
+        status = 'ABD';
+      } else if (name.contains('HALFTIME')) {
+        status = 'HT';
+      } else if (state == 'in') {
+        status = 'LIVE';
+        elapsed = _clockMinute('${st['displayClock'] ?? ''}');
+      } else if (state == 'post' || type['completed'] == true) {
+        status = 'FT';
+      }
+    }
+    // Si ESPN no dijo el estado pero ya hay marcador y pasaron casi 3 horas: terminó.
+    if (!hadState &&
+        status == 'NS' &&
+        gh != null &&
+        ga != null &&
+        DateTime.now().difference(kickoff) > const Duration(minutes: 170)) {
+      status = 'FT';
+    }
+
     return FMatch(
-      id: _int(fx['id']) ?? 0,
-      kickoff: DateTime.tryParse('${fx['date']}')?.toLocal() ?? DateTime.now(),
-      status: '${st['short'] ?? 'NS'}',
-      elapsed: _int(st['elapsed']),
-      homeId: _int(home['id']) ?? 0,
-      awayId: _int(away['id']) ?? 0,
-      homeName: '${home['name'] ?? ''}',
-      awayName: '${away['name'] ?? ''}',
-      goalsHome: _int(goals['home']),
-      goalsAway: _int(goals['away']),
-      leagueId: _int(league['id']) ?? 0,
-      leagueName: '${league['name'] ?? ''}',
-      round: '${league['round'] ?? ''}',
+      id: id,
+      kickoff: kickoff,
+      status: status,
+      elapsed: elapsed,
+      homeId: int.tryParse('${ht['id'] ?? ''}') ?? 0,
+      awayId: int.tryParse('${at['id'] ?? ''}') ?? 0,
+      homeName: '${ht['displayName'] ?? ht['name'] ?? ''}',
+      awayName: '${at['displayName'] ?? at['name'] ?? ''}',
+      goalsHome: gh,
+      goalsAway: ga,
+      league: league,
+      leagueName: _leagueNames[league] ?? league,
     );
   }
 
@@ -141,9 +213,8 @@ class FMatch {
         'an': awayName,
         'gh': goalsHome,
         'ga': goalsAway,
-        'li': leagueId,
+        'lg': league,
         'ln': leagueName,
-        'r': round,
       };
 
   factory FMatch.fromJson(Map<String, dynamic> j) => FMatch(
@@ -157,9 +228,8 @@ class FMatch {
         awayName: '${j['an'] ?? ''}',
         goalsHome: _int(j['gh']),
         goalsAway: _int(j['ga']),
-        leagueId: _int(j['li']) ?? 0,
+        league: '${j['lg'] ?? ''}',
         leagueName: '${j['ln'] ?? ''}',
-        round: '${j['r'] ?? ''}',
       );
 }
 
@@ -190,30 +260,34 @@ class FootballService extends ChangeNotifier {
 
   static final FootballService instance = FootballService._();
 
-  static const String _prefsKey = 'juancho_football_cache_v1';
-  static const int _dailyLimit = 94; // el plan gratis da 100: dejo margen
+  static const String _prefsKey = 'juancho_football_cache_v2';
+  static const String _base = 'https://site.api.espn.com/apis/site/v2/sports/soccer';
+  static const String _baseV2 = 'https://site.api.espn.com/apis/v2/sports/soccer';
 
-  String? _apiKey;
   bool _started = false;
   bool _busy = false;
   Timer? _timer;
-  String _packageName = 'com.leanbitlab.ltvL.juancho';
 
-  final Map<String, int> _teamIds = <String, int>{};
   final Map<String, List<FMatch>> _matches = <String, List<FMatch>>{};
   final Map<String, int> _lastFetch = <String, int>{}; // ms por equipo
-  final Map<String, int> _domesticLeague = <String, int>{};
+  final Map<String, int> _lastLive = <String, int>{}; // ms por liga
   final Map<String, List<FRow>> _standings = <String, List<FRow>>{};
   final Map<String, int> _standingsFetch = <String, int>{};
-  String _dayKey = '';
-  int _dayCount = 0;
-  int _lastLiveCall = 0;
 
-  bool get enabled => _apiKey != null;
+  // ESPN no pide clave: siempre activo.
+  bool get enabled => true;
 
   List<FMatch> matchesOf(String key) => _matches[key] ?? const <FMatch>[];
   List<FRow> standingsOf(String key) => _standings[key] ?? const <FRow>[];
-  int? teamIdOf(String key) => _teamIds[key];
+
+  int? teamIdOf(String key) {
+    for (final FootballTeamDef t in kFootballTeams) {
+      if (t.key == key) {
+        return t.espnId;
+      }
+    }
+    return null;
+  }
 
   // ---- arranque ----
 
@@ -222,37 +296,9 @@ class FootballService extends ChangeNotifier {
       return;
     }
     _started = true;
-    try {
-      final String cmd = await File('/proc/self/cmdline').readAsString();
-      final String pkg = cmd.split('\u0000').first.trim();
-      if (pkg.isNotEmpty && pkg.contains('.')) {
-        _packageName = pkg;
-      }
-    } catch (_) {}
-    // crea la carpeta donde se deja la clave
-    try {
-      await Directory(_keyDir()).create(recursive: true);
-    } catch (_) {}
     await _loadCache();
-    await _loadKey();
     _timer = Timer.periodic(const Duration(seconds: 60), (_) => _tick());
     unawaited(_tick());
-  }
-
-  String _keyDir() => '/storage/emulated/0/Android/data/$_packageName/files';
-
-  Future<void> _loadKey() async {
-    try {
-      final File f = File('${_keyDir()}/futbol-clave.txt');
-      if (await f.exists()) {
-        final String k = (await f.readAsString()).trim();
-        _apiKey = k.length >= 8 ? k : null;
-      } else {
-        _apiKey = null;
-      }
-    } catch (_) {
-      _apiKey = null;
-    }
   }
 
   // ---- cache ----
@@ -265,11 +311,6 @@ class FootballService extends ChangeNotifier {
         return;
       }
       final Map<String, dynamic> j = (jsonDecode(raw) as Map).cast<String, dynamic>();
-      ((j['ids'] ?? <String, dynamic>{}) as Map).forEach((Object? k, Object? v) {
-        if (v is num) {
-          _teamIds['$k'] = v.toInt();
-        }
-      });
       ((j['matches'] ?? <String, dynamic>{}) as Map).forEach((Object? k, Object? v) {
         _matches['$k'] = <FMatch>[
           for (final Object? m in (v as List)) FMatch.fromJson((m as Map).cast<String, dynamic>()),
@@ -278,11 +319,6 @@ class FootballService extends ChangeNotifier {
       ((j['last'] ?? <String, dynamic>{}) as Map).forEach((Object? k, Object? v) {
         if (v is num) {
           _lastFetch['$k'] = v.toInt();
-        }
-      });
-      ((j['dom'] ?? <String, dynamic>{}) as Map).forEach((Object? k, Object? v) {
-        if (v is num) {
-          _domesticLeague['$k'] = v.toInt();
         }
       });
       ((j['stand'] ?? <String, dynamic>{}) as Map).forEach((Object? k, Object? v) {
@@ -295,8 +331,6 @@ class FootballService extends ChangeNotifier {
           _standingsFetch['$k'] = v.toInt();
         }
       });
-      _dayKey = '${j['day'] ?? ''}';
-      _dayCount = (j['count'] as num?)?.toInt() ?? 0;
     } catch (_) {
       // cache dañada: se ignora y se vuelve a pedir
     }
@@ -308,16 +342,12 @@ class FootballService extends ChangeNotifier {
       await prefs.setString(
         _prefsKey,
         jsonEncode(<String, dynamic>{
-          'ids': _teamIds,
           'matches': _matches.map((String k, List<FMatch> v) =>
               MapEntry<String, dynamic>(k, <Map<String, dynamic>>[for (final FMatch m in v) m.toJson()])),
           'last': _lastFetch,
-          'dom': _domesticLeague,
           'stand': _standings.map((String k, List<FRow> v) =>
               MapEntry<String, dynamic>(k, <Map<String, dynamic>>[for (final FRow r in v) r.toJson()])),
           'standTs': _standingsFetch,
-          'day': _dayKey,
-          'count': _dayCount,
         }),
       );
     } catch (_) {}
@@ -325,31 +355,14 @@ class FootballService extends ChangeNotifier {
 
   // ---- red ----
 
-  String _today() {
-    final DateTime n = DateTime.now().toUtc(); // la cuota se reinicia a las 00:00 UTC
-    return '${n.year}-${n.month}-${n.day}';
-  }
-
-  Future<Map<String, dynamic>?> _get(String path, Map<String, String> query) async {
-    final String key = _apiKey ?? '';
-    if (key.isEmpty) {
-      return null;
-    }
-    final String today = _today();
-    if (_dayKey != today) {
-      _dayKey = today;
-      _dayCount = 0;
-    }
-    if (_dayCount >= _dailyLimit) {
-      return null;
-    }
+  Future<Map<String, dynamic>?> _getJson(String url) async {
     final HttpClient client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
     try {
-      final HttpClientRequest req = await client.getUrl(Uri.https('v3.football.api-sports.io', path, query));
-      req.headers.set('x-apisports-key', key);
+      final HttpClientRequest req = await client.getUrl(Uri.parse(url));
+      req.headers.set('User-Agent', 'Mozilla/5.0 (Android TV) LTvJuancho');
+      req.headers.set('Accept', 'application/json');
       final HttpClientResponse res = await req.close().timeout(const Duration(seconds: 20));
       final String body = await res.transform(utf8.decoder).join();
-      _dayCount++;
       if (res.statusCode != 200) {
         return null;
       }
@@ -357,12 +370,7 @@ class FootballService extends ChangeNotifier {
       if (decoded is! Map) {
         return null;
       }
-      final Map<String, dynamic> j = decoded.cast<String, dynamic>();
-      final Object? errs = j['errors'];
-      if ((errs is Map && errs.isNotEmpty) || (errs is List && errs.isNotEmpty)) {
-        return null;
-      }
-      return j;
+      return decoded.cast<String, dynamic>();
     } catch (_) {
       return null;
     } finally {
@@ -370,154 +378,113 @@ class FootballService extends ChangeNotifier {
     }
   }
 
-  int _seasonFor(FootballTeamDef t) {
-    final DateTime n = DateTime.now();
-    if (t.calendarSeason) {
-      return n.year;
-    }
-    return n.month >= 7 ? n.year : n.year - 1;
-  }
-
-  static String _norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
-
-  Future<void> _resolveTeamId(FootballTeamDef t) async {
-    final Map<String, dynamic>? j = await _get('/teams', <String, String>{'search': t.search, 'country': t.country});
+  List<FMatch> _parseEvents(Map<String, dynamic>? j, String league) {
+    final List<FMatch> out = <FMatch>[];
     if (j == null) {
-      return;
+      return out;
     }
-    final List<dynamic> list = (j['response'] as List?) ?? const <dynamic>[];
-    int? exact;
-    int? partial;
-    for (final dynamic item in list) {
-      final Map<String, dynamic>? team = ((item as Map)['team'] as Map?)?.cast<String, dynamic>();
-      if (team == null) {
-        continue;
-      }
-      final String n = _norm('${team['name']}');
-      final int? id = (team['id'] as num?)?.toInt();
-      if (id == null) {
-        continue;
-      }
-      if (n == _norm(t.search)) {
-        exact = id;
-        break;
-      }
-      if (partial == null && n.contains(_norm(t.search))) {
-        partial = id;
-      }
-    }
-    final int? chosen = exact ?? partial;
-    if (chosen != null) {
-      _teamIds[t.key] = chosen;
-    }
-  }
-
-  Future<void> _fetchSeason(FootballTeamDef t) async {
-    final int? id = _teamIds[t.key];
-    if (id == null) {
-      return;
-    }
-    final Map<String, dynamic>? j =
-        await _get('/fixtures', <String, String>{'team': '$id', 'season': '${_seasonFor(t)}'});
-    _lastFetch[t.key] = DateTime.now().millisecondsSinceEpoch;
-    if (j == null) {
-      return;
-    }
-    final List<FMatch> list = <FMatch>[];
-    for (final dynamic item in (j['response'] as List?) ?? const <dynamic>[]) {
+    for (final dynamic ev in (j['events'] as List?) ?? const <dynamic>[]) {
       try {
-        list.add(FMatch.fromApi((item as Map).cast<String, dynamic>()));
+        final FMatch? m = FMatch.fromEspn((ev as Map).cast<String, dynamic>(), league);
+        if (m != null) {
+          out.add(m);
+        }
       } catch (_) {}
     }
-    list.sort((FMatch a, FMatch b) => a.kickoff.compareTo(b.kickoff));
-    _matches[t.key] = list;
+    return out;
+  }
 
-    // la liga local es la competicion donde mas juega el equipo
-    final Map<int, int> counts = <int, int>{};
-    for (final FMatch m in list) {
-      counts[m.leagueId] = (counts[m.leagueId] ?? 0) + 1;
+  // Calendario completo del equipo: lo jugado + lo que viene.
+  Future<void> _fetchSchedule(FootballTeamDef t) async {
+    final Map<String, dynamic>? past = await _getJson('$_base/${t.league}/teams/${t.espnId}/schedule');
+    final Map<String, dynamic>? next = await _getJson('$_base/${t.league}/teams/${t.espnId}/schedule?fixture=true');
+    _lastFetch[t.key] = DateTime.now().millisecondsSinceEpoch;
+    if (past == null && next == null) {
+      return;
     }
-    int best = -1;
-    int bestCount = 0;
-    counts.forEach((int lid, int c) {
-      if (c > bestCount) {
-        best = lid;
-        bestCount = c;
+    final Map<int, FMatch> byId = <int, FMatch>{
+      for (final FMatch m in _matches[t.key] ?? const <FMatch>[]) m.id: m,
+    };
+    // primero lo que viene, luego lo jugado (lo jugado manda si el partido sale en los dos)
+    for (final FMatch m in <FMatch>[..._parseEvents(next, t.league), ..._parseEvents(past, t.league)]) {
+      byId[m.id] = m;
+    }
+    final DateTime now = DateTime.now();
+    final List<FMatch> list = byId.values
+        .where((FMatch m) =>
+            m.kickoff.isAfter(now.subtract(const Duration(days: 45))) &&
+            m.kickoff.isBefore(now.add(const Duration(days: 45))))
+        .toList()
+      ..sort((FMatch a, FMatch b) => a.kickoff.compareTo(b.kickoff));
+    _matches[t.key] = list;
+  }
+
+  // Marcador en vivo de una liga: una sola petición sirve para todos mis equipos de esa liga.
+  Future<void> _fetchLive(String league) async {
+    _lastLive[league] = DateTime.now().millisecondsSinceEpoch;
+    final Map<String, dynamic>? j = await _getJson('$_base/$league/scoreboard');
+    for (final FMatch m in _parseEvents(j, league)) {
+      for (final FootballTeamDef t in kFootballTeams) {
+        if (t.league != league || (m.homeId != t.espnId && m.awayId != t.espnId)) {
+          continue;
+        }
+        final List<FMatch> list = _matches.putIfAbsent(t.key, () => <FMatch>[]);
+        final int idx = list.indexWhere((FMatch x) => x.id == m.id);
+        if (idx >= 0) {
+          list[idx] = m;
+        } else {
+          list.add(m);
+          list.sort((FMatch a, FMatch b) => a.kickoff.compareTo(b.kickoff));
+        }
       }
-    });
-    if (best > 0) {
-      _domesticLeague[t.key] = best;
     }
+  }
+
+  static num? _stat(Object? stats, String name) {
+    if (stats is! List) {
+      return null;
+    }
+    for (final dynamic s in stats) {
+      if (s is Map && s['name'] == name && s['value'] is num) {
+        return s['value'] as num;
+      }
+    }
+    return null;
   }
 
   Future<void> _fetchStandings(FootballTeamDef t) async {
-    final int? league = _domesticLeague[t.key];
-    final int? teamId = _teamIds[t.key];
-    if (league == null || teamId == null) {
-      return;
-    }
-    final Map<String, dynamic>? j =
-        await _get('/standings', <String, String>{'league': '$league', 'season': '${_seasonFor(t)}'});
+    final Map<String, dynamic>? j = await _getJson('$_baseV2/${t.league}/standings');
     _standingsFetch[t.key] = DateTime.now().millisecondsSinceEpoch;
     if (j == null) {
       return;
     }
     try {
-      final List<dynamic> resp = (j['response'] as List?) ?? const <dynamic>[];
-      if (resp.isEmpty) {
-        return;
-      }
-      final List<dynamic> groups = ((resp.first as Map)['league'] as Map)['standings'] as List;
-      // varios grupos (torneos con fases): se toma el que contiene al equipo
-      List<dynamic>? chosen;
+      // varios grupos (torneos con fases, como la liga colombiana): se toma el que contiene al equipo
+      final List<dynamic> groups = <dynamic>[
+        ...((j['children'] as List?) ?? const <dynamic>[]),
+        if (j['standings'] is Map) j,
+      ];
       for (final dynamic g in groups) {
-        final List<dynamic> rows = g as List;
-        if (rows.any((dynamic r) => ((r as Map)['team'] as Map)['id'] == teamId)) {
-          chosen = rows;
-          break;
+        final List<dynamic> entries =
+            (((g as Map)['standings'] as Map?)?['entries'] as List?) ?? const <dynamic>[];
+        final List<FRow> rows = <FRow>[];
+        for (int i = 0; i < entries.length; i++) {
+          final Map<String, dynamic> e = (entries[i] as Map).cast<String, dynamic>();
+          final Map<String, dynamic> team = ((e['team'] ?? <String, dynamic>{}) as Map).cast<String, dynamic>();
+          rows.add(FRow(
+            rank: _stat(e['stats'], 'rank')?.toInt() ?? (i + 1),
+            teamId: int.tryParse('${team['id'] ?? ''}') ?? 0,
+            name: '${team['displayName'] ?? team['name'] ?? ''}',
+            points: _stat(e['stats'], 'points')?.toInt() ?? 0,
+          ));
+        }
+        if (rows.any((FRow r) => r.teamId == t.espnId)) {
+          rows.sort((FRow a, FRow b) => a.rank.compareTo(b.rank));
+          _standings[t.key] = rows;
+          return;
         }
       }
-      if (chosen == null) {
-        return;
-      }
-      _standings[t.key] = <FRow>[
-        for (final dynamic r in chosen)
-          FRow(
-            rank: ((r as Map)['rank'] as num?)?.toInt() ?? 0,
-            teamId: (((r['team']) as Map)['id'] as num?)?.toInt() ?? 0,
-            name: '${(r['team'] as Map)['name']}',
-            points: (r['points'] as num?)?.toInt() ?? 0,
-          ),
-      ]..sort((FRow a, FRow b) => a.rank.compareTo(b.rank));
     } catch (_) {}
-  }
-
-  // Partidos en vivo de mis equipos: una sola peticion para todos.
-  Future<void> _pollLive() async {
-    _lastLiveCall = DateTime.now().millisecondsSinceEpoch;
-    final Map<String, dynamic>? j = await _get('/fixtures', <String, String>{'live': 'all'});
-    if (j == null) {
-      return;
-    }
-    for (final dynamic item in (j['response'] as List?) ?? const <dynamic>[]) {
-      try {
-        final FMatch m = FMatch.fromApi((item as Map).cast<String, dynamic>());
-        for (final FootballTeamDef t in kFootballTeams) {
-          final int? id = _teamIds[t.key];
-          if (id == null || (m.homeId != id && m.awayId != id)) {
-            continue;
-          }
-          final List<FMatch> list = _matches.putIfAbsent(t.key, () => <FMatch>[]);
-          final int idx = list.indexWhere((FMatch x) => x.id == m.id);
-          if (idx >= 0) {
-            list[idx] = m;
-          } else {
-            list.add(m);
-            list.sort((FMatch a, FMatch b) => a.kickoff.compareTo(b.kickoff));
-          }
-        }
-      } catch (_) {}
-    }
   }
 
   // ---- ciclo ----
@@ -528,36 +495,21 @@ class FootballService extends ChangeNotifier {
     }
     _busy = true;
     try {
-      if (_apiKey == null) {
-        await _loadKey();
-        if (_apiKey == null) {
-          return;
-        }
-      }
       final int now = DateTime.now().millisecondsSinceEpoch;
+      final Set<String> liveLeagues = <String>{};
 
       for (final FootballTeamDef t in kFootballTeams) {
-        if (!_teamIds.containsKey(t.key)) {
-          await _resolveTeamId(t);
-        }
-      }
-
-      bool anyInWindow = false;
-      for (final FootballTeamDef t in kFootballTeams) {
-        if (!_teamIds.containsKey(t.key)) {
-          continue;
-        }
         final int last = _lastFetch[t.key] ?? 0;
         final List<FMatch> list = _matches[t.key] ?? const <FMatch>[];
 
-        bool stale = now - last > const Duration(hours: 6).inMilliseconds;
+        bool stale = list.isEmpty ? now - last > 3 * 60000 : now - last > const Duration(hours: 6).inMilliseconds;
         for (final FMatch m in list) {
           final int k = m.kickoff.millisecondsSinceEpoch;
           // en juego o por empezar
           if (!m.isFinished && !m.isPostponed && now > k - 10 * 60000 && now < k + 150 * 60000) {
-            anyInWindow = true;
+            liveLeagues.add(t.league);
           }
-          // ya debio terminar y aun figura sin resultado final: pedir de nuevo
+          // ya debió terminar y aún figura sin resultado final: pedir de nuevo
           if (!m.isFinished &&
               !m.isPostponed &&
               now > k + 110 * 60000 &&
@@ -567,17 +519,21 @@ class FootballService extends ChangeNotifier {
           }
         }
         if (stale) {
-          await _fetchSeason(t);
+          await _fetchSchedule(t);
         }
-        if (_standings[t.key] == null || now - (_standingsFetch[t.key] ?? 0) > const Duration(hours: 12).inMilliseconds) {
-          if (_domesticLeague.containsKey(t.key)) {
-            await _fetchStandings(t);
-          }
+        final int lastStand = _standingsFetch[t.key] ?? 0;
+        final bool standStale = _standings[t.key] == null
+            ? now - lastStand > 10 * 60000
+            : now - lastStand > const Duration(hours: 6).inMilliseconds;
+        if (standStale) {
+          await _fetchStandings(t);
         }
       }
 
-      if (anyInWindow && now - _lastLiveCall > const Duration(minutes: 3).inMilliseconds) {
-        await _pollLive();
+      for (final String league in liveLeagues) {
+        if (now - (_lastLive[league] ?? 0) > const Duration(minutes: 2).inMilliseconds) {
+          await _fetchLive(league);
+        }
       }
     } finally {
       _busy = false;
@@ -592,7 +548,7 @@ class FootballService extends ChangeNotifier {
   /// si no, el de arriba, el equipo y el de abajo.
   List<FRow> windowFor(String key) {
     final List<FRow> rows = standingsOf(key);
-    final int? id = _teamIds[key];
+    final int? id = teamIdOf(key);
     if (rows.isEmpty || id == null) {
       return const <FRow>[];
     }
@@ -682,32 +638,47 @@ String _dia(DateTime t) {
   return '${dias[t.weekday - 1]} ${t.day} ${meses[t.month - 1]}';
 }
 
-String _ronda(String r) {
-  final String l = r.toLowerCase();
-  if (l.contains('round of 16')) return 'Octavos';
-  if (l.contains('quarter')) return 'Cuartos';
-  if (l.contains('semi')) return 'Semifinal';
-  if (l.contains('play-off') || l.contains('playoff')) return 'Playoff';
-  if (l == 'final') return 'Final';
-  if (l.contains('league stage')) return 'Fase de liga';
-  if (l.contains('group')) return 'Fase de grupos';
-  return r;
-}
-
 String _corto(String name) {
   String n = name.trim();
   const Map<String, String> map = <String, String>{
     'Manchester United': 'Man United',
     'Manchester City': 'Man City',
-    'Tottenham': 'Spurs',
-    'Newcastle': 'Newcastle',
+    'Tottenham Hotspur': 'Spurs',
+    'Newcastle United': 'Newcastle',
     'Nottingham Forest': 'Forest',
-    'Wolves': 'Wolves',
+    'Wolverhampton Wanderers': 'Wolves',
+    'West Ham United': 'West Ham',
+    'Leeds United': 'Leeds',
+    'Crystal Palace': 'Palace',
+    'Brighton & Hove Albion': 'Brighton',
+    'AFC Bournemouth': 'Bournemouth',
+    'Aston Villa': 'Aston Villa',
     'AC Milan': 'Milan',
-    'America de Cali': 'América',
+    'Internazionale': 'Inter',
+    'América de Cali': 'América',
+    'Atlético Nacional': 'Nacional',
+    'Atlético Bucaramanga': 'Bucaramanga',
+    'Atlético Junior': 'Junior',
+    'Independiente Medellín': 'Medellín',
+    'Independiente Santa Fe': 'Santa Fe',
+    'Deportivo Cali': 'Dep. Cali',
+    'Deportivo Pereira': 'Pereira',
+    'Deportivo Pasto': 'Pasto',
+    'Deportes Tolima': 'Tolima',
+    'Águilas Doradas': 'Águilas',
+    'Jaguares de Córdoba': 'Jaguares',
+    'Internacional de Bogotá': 'Int. Bogotá',
+    'Cúcuta Deportivo': 'Cúcuta',
+    'Boyacá Chicó FC': 'Boyacá Chicó',
+    'Fortaleza CEIF': 'Fortaleza',
+    'Llaneros FC': 'Llaneros',
+    'Alianza FC': 'Alianza',
+    'Borussia Dortmund': 'Dortmund',
+    'Bayern Munich': 'Bayern',
+    'Bayer Leverkusen': 'Leverkusen',
   };
   n = map[n] ?? n;
-  return n.length > 11 ? n.substring(0, 11) : n;
+  return n.length > 12 ? n.substring(0, 12) : n;
 }
 
 String matchText(FMatch m, FootballTeamDef t) {
@@ -725,8 +696,7 @@ String matchText(FMatch m, FootballTeamDef t) {
 }
 
 String _shortTeam(String apiName, int id, FootballTeamDef mine) {
-  final int? myId = FootballService.instance.teamIdOf(mine.key);
-  if (myId != null && id == myId) {
+  if (id == mine.espnId) {
     return mine.short;
   }
   return _corto(apiName);
@@ -794,10 +764,10 @@ class _FootballLineState extends State<FootballLine> {
 
   Widget _chips(FootballTeamDef t, FMatch m) {
     final FootballService s = FootballService.instance;
-    final bool domestic = s.standingsOf(t.key).isNotEmpty && m.leagueId == _domesticOf(t);
+    final bool domestic = s.standingsOf(t.key).isNotEmpty && m.league == t.league;
     if (!domestic) {
       return Text(
-        '${m.leagueName} · ${_ronda(m.round)}',
+        m.leagueName,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.7)),
@@ -822,8 +792,6 @@ class _FootballLineState extends State<FootballLine> {
       ],
     );
   }
-
-  int? _domesticOf(FootballTeamDef t) => FootballService.instance._domesticLeague[t.key];
 
   @override
   Widget build(BuildContext context) {
